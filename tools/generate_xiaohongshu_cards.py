@@ -22,8 +22,10 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from fund_monitor.fetch import fetch_all
 from fund_monitor.fetch.direct_sales import fetch_official_limits
+from fund_monitor.fetch.sources import eastmoney_jjjz
+from fund_monitor.fetch.sources import eastmoney_ranking
+from fund_monitor.output.image import generate_direct_sales
 
 
 CONFIG_PATH = ROOT / "config.json"
@@ -39,7 +41,10 @@ FONT_SCHEMES = {
     "c": Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
     "d": Path("/System/Library/Fonts/STHeiti Medium.ttc"),
 }
-ACTIVE_FONT_SCHEME = "a"
+# UI v2 跟随飞书推送：STHeiti 的字面和原卡片保持一致；旧方案函数仍可
+# 通过修改该变量做设计试验，但正式输出固定使用该字体。
+ACTIVE_FONT_SCHEME = "d"
+FEISHU_FONT_PATH = FONT_SCHEMES["b"]
 FONT_PATHS = [
     FONT_SCHEMES[ACTIVE_FONT_SCHEME],
     Path("/System/Library/Fonts/STHeiti Medium.ttc"),
@@ -52,6 +57,13 @@ def font(size: int):
         if path.exists():
             return ImageFont.truetype(str(path), size)
     return ImageFont.load_default()
+
+
+def feishu_font(size: int):
+    """PingFang SC Medium：与 active_20260826 飞书卡片一致的无衬线字面。"""
+    if FEISHU_FONT_PATH.exists():
+        return ImageFont.truetype(str(FEISHU_FONT_PATH), size, index=7)
+    return font(size)
 
 
 def number_font(size: int):
@@ -293,84 +305,75 @@ def make_reference_group_card(rows: list[dict], group: str, date_text: str, outp
     image.save(output, "PNG", optimize=True)
 
 
-def make_reference_table_card(rows: list[dict], group: str, date_text: str, output: Path):
-    """A four-column table in the Nasdaq annual-returns visual language."""
-    width, height = 1080, 1440
-    image = Image.new("RGB", (width, height), "#05060b")
-    light = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(light)
-    ld.ellipse((720, -400, 1540, 440), fill=(212, 178, 106, 32))
-    image = Image.alpha_composite(image.convert("RGBA"), light.filter(ImageFilter.GaussianBlur(140))).convert("RGB")
+def _legacy_make_reference_table_card(rows: list[dict], group: str, date_text: str, output: Path):
+    """直销 / 代销额度小红书卡片，沿用当前飞书推送 UI v2。"""
+    width, pad, card_pad = 1080, 60, 40
+    title_h, header_h, row_h = 180, 62, 94
+    # 直销数据已验证的基金才会传入；高度随行数增长，不裁切基金信息。
+    height = pad + title_h + 24 + header_h + len(rows) * row_h + 24 + pad
+    image = Image.new("RGB", (width, height), "#F5F7FA")
     draw = ImageDraw.Draw(image, "RGBA")
-    for left, top, sx, sy in ((40, 40, 1, 1), (1040, 40, -1, 1), (40, 1400, 1, -1), (1040, 1400, -1, -1)):
-        draw.line((left, top, left + sx * 56, top), fill=(212, 178, 106, 115), width=2)
-        draw.line((left, top, left, top + sy * 56), fill=(212, 178, 106, 115), width=2)
+    left, right = pad + card_pad, width - pad - card_pad
+    direct_x, agency_x = 700, right
 
-    topic = "PASSIVE QDII · RETURN & QUOTA" if group == "被动型" else "ACTIVE QDII · RETURN & QUOTA"
+    rounded(draw, (pad, pad, width - pad, pad + title_h), 24, "#1A1A2E")
     title = f"QDII {group}基金直销 / 代销额度"
-    range_label = date_text.replace(".", " — ")
-    for text, y, fnt, fill in ((topic, 112, display_font(26), (212, 178, 106, 255)),
-                               (title, 156, font(52), (242, 233, 210, 255)),
-                               (range_label, 228, number_font(25), (242, 233, 210, 255))):
-        box = draw.textbbox((0, 0), text, font=fnt)
-        draw.text(((width - (box[2] - box[0])) / 2, y), text, font=fnt, fill=fill)
-    draw.line((480, 282, 600, 282), fill=(212, 178, 106, 175), width=1)
+    title_font = feishu_font(48)
+    title_box = draw.textbbox((0, 0), title, font=title_font)
+    draw.text(((width - (title_box[2] - title_box[0])) / 2, pad + 40), title,
+              font=title_font, fill="#FFFFFF")
+    subtitle = f"直销额度 · 代销额度 · {date_text.replace('.', '-') }"
+    subtitle_box = draw.textbbox((0, 0), subtitle, font=feishu_font(28))
+    draw.text(((width - (subtitle_box[2] - subtitle_box[0])) / 2, pad + 116), subtitle,
+              font=feishu_font(28), fill="#8892A3")
 
-    x0, x1, y0 = 58, 1022, 330
-    cols = (x0 + 24, 620, 840, 998)
-    headers = ("基金名称", "近一年收益率", "直销额度", "代销额度")
-    # The header is deliberately an open typographic row: no filled capsule,
-    # so the information reads as one continuous editorial table.
-    draw.text((cols[0], y0 + 10), headers[0], font=font(19), fill=(212, 178, 106, 255))
-    for x, header in zip(cols[1:], headers[1:]):
-        text_right(draw, x, y0 + 10, header, font(19), (212, 178, 106, 255))
-    draw.line((x0 + 18, y0 + 44, x1 - 18, y0 + 44), fill=(212, 178, 106, 175), width=1)
+    table_y = pad + title_h + 24
+    table_h = header_h + len(rows) * row_h + 24
+    rounded(draw, (pad, table_y, width - pad, table_y + table_h), 24, "#FFFFFF")
+    header_font = feishu_font(25)
+    draw.text((left, table_y + 18), "基金名称（基金代码）", font=header_font, fill="#64748B")
+    text_right(draw, direct_x, table_y + 18, "直销额度", header_font, "#64748B")
+    text_right(draw, agency_x, table_y + 18, "代销额度", header_font, "#64748B")
 
-    row_h = 60
-    for index, item in enumerate(rows[:16]):
-        y = y0 + 52 + index * row_h
-        draw.line((x0 + 18, y + 54, x1 - 18, y + 54), fill=(255, 255, 255, 28), width=1)
-        label = ellipsize(draw, item["display"], font(21), 390)
-        draw.text((cols[0], y + 14), label, font=font(21), fill=(231, 236, 243, 255))
-        name_width = draw.textbbox((0, 0), label, font=font(21))[2]
-        draw.text((cols[0] + name_width + 12, y + 18), item["code"], font=font(15), fill=(138, 147, 166, 255))
-        ret = format_return(item["return_1y"])
-        ret_color = (239, 59, 59, 255) if not ret.startswith("-") and ret != "—" else (212, 178, 106, 255)
-        text_right(draw, cols[1], y + 13, ret, value_font(ret, 23), ret_color)
+    for index, item in enumerate(rows):
+        y = table_y + header_h + index * row_h
+        if index:
+            draw.line((left, y, right, y), fill="#E2E8F0", width=1)
+        label = ellipsize(draw, item["display"], feishu_font(29), 450)
+        draw.text((left, y + 17), label, font=feishu_font(29), fill="#334155")
+        draw.text((left + 12, y + 54), f"（{item['code']}）", font=feishu_font(23), fill="#94A3B8")
         direct = compact_limit(item["direct_sales_limit"])
         agency = compact_limit(item["purchase_limit"])
-        direct_color = (239, 59, 59, 255) if direct == "暂停" else (242, 233, 210, 255)
-        agency_color = (239, 59, 59, 255) if agency == "暂停" else (242, 233, 210, 255)
-        text_right(draw, cols[2], y + 13, direct, value_font(direct, 22), direct_color)
-        text_right(draw, cols[3], y + 13, agency, value_font(agency, 22), agency_color)
+        direct_color = "#EF4444" if direct == "暂停" else "#10B981" if direct != "—" else "#94A3B8"
+        agency_color = "#EF4444" if agency == "暂停" else "#10B981" if agency != "—" else "#94A3B8"
+        text_right(draw, direct_x, y + 28, direct, feishu_font(34), direct_color)
+        text_right(draw, agency_x, y + 28, agency, feishu_font(34), agency_color)
 
-    # Deliberately cross the content area so a cropped repost still retains attribution.
+    # 中部水印沿用飞书推送的低干扰样式。
     watermark = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     watermark_draw = ImageDraw.Draw(watermark)
+    mark_font = feishu_font(76)
     mark = "HRunning"
-    mark_font = display_font(64)
     mark_box = watermark_draw.textbbox((0, 0), mark, font=mark_font)
-    mark_width = mark_box[2] - mark_box[0]
-    watermark_draw.text(
-        ((width - mark_width) / 2, 820),
-        mark,
-        font=mark_font,
-        fill=(212, 178, 106, 75),
-    )
-    watermark = watermark.rotate(18, resample=Image.Resampling.BICUBIC)
-    image = Image.alpha_composite(image.convert("RGBA"), watermark)
+    watermark_draw.text(((width - (mark_box[2] - mark_box[0])) / 2, int(height * .46)), mark,
+                        font=mark_font, fill=(30, 30, 50, 52))
+    image = Image.alpha_composite(image.convert("RGBA"), watermark.rotate(-22, resample=Image.Resampling.BICUBIC))
+    image.convert("RGB").save(output, "PNG", optimize=True)
 
-    disclaimer = "免责声明：数据仅供参考，不构成投资建议；额度以基金公司及销售机构实时规则为准"
-    disclaimer_font = font(13)
-    disclaimer_box = ImageDraw.Draw(image).textbbox((0, 0), disclaimer, font=disclaimer_font)
-    ImageDraw.Draw(image).text(
-        ((width - (disclaimer_box[2] - disclaimer_box[0])) / 2, 1372),
-        disclaimer,
-        font=disclaimer_font,
-        fill=(138, 147, 166, 210),
-    )
 
-    image.save(output, "PNG", optimize=True)
+def make_reference_table_card(rows: list[dict], group: str, date_text: str, output: Path):
+    """使用飞书推送同一生成器输出小红书直销 / 代销卡片。
+
+    不再维护一份截图式复刻的排版：标题高度、圆角、字体、表格列距、
+    排序规则和水印均直接继承 ``fund_monitor.output.image``。
+    ``date_text`` 保留在调用签名中，以保持现有生成流程兼容。
+    """
+    del date_text
+    generate_direct_sales(
+        rows,
+        str(output),
+        title=f"QDII {group}基金直销 / 代销额度",
+    )
 
 
 def main():
@@ -378,8 +381,12 @@ def main():
     configured = config["passive_funds"] + config["active_funds"]
     funds = [fund for fund in configured if fund["code"] not in EXCLUDED_CODES]
 
-    print(f"Fetching market data for {len(funds)} configured funds …")
-    market = {item["code"]: item for item in fetch_all(funds)}
+    # UI v2 不展示近一年收益率，无需请求 RANKING 或在其失败时逐只回退
+    # HTML；代销额度直接使用一次性全市场限购快照即可，避免无谓的慢请求。
+    print(f"Fetching agency-limit snapshot for {len(funds)} configured funds …")
+    market = eastmoney_jjjz.fetch_market_snapshot()
+    print("Fetching one-year return snapshot …")
+    ranking = eastmoney_ranking.fetch_market_snapshot()
     print(f"Fetching official direct-sales data for {len(funds)} supported funds …")
     direct = {item["code"]: item for item in fetch_official_limits(funds)}
 
@@ -393,15 +400,16 @@ def main():
             continue
         rows.append({
             **fund,
-            "return_1y": market_item.get("return_1y", ""),
+            "return_1y": ranking.get(fund["code"], {}).get("return_1y", "—"),
             "purchase_limit": market_item.get("purchase_limit", "未获取"),
             "direct_sales_limit": direct_item.get("direct_sales_limit", "未获取"),
         })
 
-    rows.sort(key=lambda item: (-return_value(item["return_1y"]), item["code"]))
+    rows.sort(key=lambda item: item["code"])
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     date_text = datetime.now().strftime("%Y.%m.%d")
-    # The final deliverable is only the approved active/passive table-card pair.
+    # The final deliverable is the active/passive UI v2 pair.  A row only enters
+    # the card after its official direct-sales result has been verified above.
     outputs = []
 
     # Requested one-card summary for each configured category.
@@ -412,12 +420,10 @@ def main():
     group_outputs = []
     for label, codes in groups.items():
         grouped_rows = [item for item in rows if item["code"] in codes]
-        for scheme in ("c",):
-            globals()["ACTIVE_FONT_SCHEME"] = scheme
-            output = OUTPUT_DIR / f"qdii-{label}-direct-sales-{datetime.now():%Y%m%d}-html-scheme.png"
-            make_reference_table_card(grouped_rows, label, date_text, output)
-            group_outputs.append(output)
-    globals()["ACTIVE_FONT_SCHEME"] = "a"
+        output = OUTPUT_DIR / f"qdii-{label}-direct-sales-{datetime.now():%Y%m%d-%H%M%S}-v2.png"
+        make_reference_table_card(grouped_rows, label, date_text, output)
+        group_outputs.append(output)
+    globals()["ACTIVE_FONT_SCHEME"] = "d"
 
     manifest = OUTPUT_DIR / f"qdii-direct-sales-{datetime.now():%Y%m%d}-manifest.json"
     manifest.write_text(json.dumps({

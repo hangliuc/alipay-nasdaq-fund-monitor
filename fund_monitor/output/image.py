@@ -58,6 +58,26 @@ def _limit_val(s: str) -> float:
     return float(m.group(1).replace(",", "")) if m else -2
 
 
+def _return_val(s: str) -> float:
+    """解析近一年收益率，用于主动/被动卡片统一排序。"""
+    m = re.search(r"-?[\d,.]+", s or "")
+    return float(m.group(0).replace(",", "")) if m else float("-inf")
+
+
+def _format_return_ui(s: str) -> str:
+    """收益率统一为 4 位数字主体（如 86.00%、08.69%）。"""
+    m = re.search(r"-?[\d,.]+", s or "")
+    if not m:
+        return "—"
+    value = float(m.group(0).replace(",", ""))
+    formatted = f"{value:.2f}"
+    if 0 <= value < 10:
+        formatted = "0" + formatted
+    elif -10 < value < 0:
+        formatted = "-0" + formatted[1:]
+    return formatted + "%"
+
+
 def _fmt_limit(s: str) -> str:
     """格式化限额显示（卡片中只展示数字，省略单位"元"）"""
     m = re.search(r"([\d,.]+)\s*万元", s or "")
@@ -100,6 +120,16 @@ def _center_text(d, w, y, text, font, fill, absolute_center=None):
 def _right_text(d, right_x, y, text, font, fill):
     bb = d.textbbox((0, 0), text, font=font)
     d.text((right_x - (bb[2] - bb[0]), y), text, fill=fill, font=font)
+
+
+def _ellipsize(d, text: str, font, max_width: int) -> str:
+    """将名称收束在数值列之前，基金代码始终保持同一行。"""
+    if d.textbbox((0, 0), text, font=font)[2] <= max_width:
+        return text
+    suffix = "…"
+    while text and d.textbbox((0, 0), text + suffix, font=font)[2] > max_width:
+        text = text[:-1]
+    return text + suffix
 
 
 def _add_watermark(img: Image.Image, text: str = "HRuning") -> Image.Image:
@@ -248,40 +278,49 @@ def generate(results: list[dict], output_path: str,
 
 
 def generate_direct_sales(results: list[dict], output_path: str,
-                          title: str = "QDII 基金额度对比") -> str:
-    """生成独立的直销/第三方额度对比小红书卡片。"""
-    # 先看第三方额度；额度相同时再看直销额度。两项都相同则以代码保证稳定排序。
+                          title: str = "QDII 基金直销 / 代销额度") -> str:
+    """生成直销 / 代销额度对比卡片（飞书推送 UI v2）。
+
+    版式刻意复用 ``generate`` 的飞书视觉系统：浅灰画布、深色标题块、
+    白色连续表格及绿/红状态色。这样三类日报图片在同一条推送中会是一套
+    统一的产品界面，而直销与代销列也不会被误解成收益率或排名。
+    """
+    # 先展示仍可申购的基金，再展示额度暂停基金；每组内按近一年收益率降序。
+    # 这样高收益但暂停中的基金不会挤到可申购基金前面。
     results = sorted(
         results,
         key=lambda item: (
-            -_limit_val(item.get("purchase_limit", "")),
-            -_limit_val(item.get("direct_sales_limit", "")),
+            int("暂停" in (item.get("direct_sales_limit", "") or "") or
+                "暂停" in (item.get("purchase_limit", "") or "")),
+            -_return_val(item.get("return_1y", "")),
             item.get("code", ""),
         ),
     )
     W, PAD, CPAD, CR = 1080, 60, 40, 24
     HDR_H, COL_HDR_H, ROW_H = 180, 62, 94
     IL, IR = PAD + CPAD, W - PAD - CPAD
-    DIRECT_X, THIRD_X = 690, IR
+    # 四列数值均右对齐，复用飞书日报的收益率 + 双额度信息密度。
+    RETURN_X, DIRECT_X, AGENCY_X = 620, 840, IR
     H = PAD + HDR_H + 24 + COL_HDR_H + len(results) * ROW_H + 24 + PAD
 
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
     ft, fs = _font(48), _font(28)
-    fch, fn, fc, fl = _font(25), _font(29), _font(23), _font(34)
+    fch, fn, fc, fl, fr = _font(25), _font(29), _font(23), _font(34), _font(30)
     today = datetime.now().strftime("%Y-%m-%d")
 
     y = PAD
     _rounded_rect(d, (PAD, y, W - PAD, y + HDR_H), CR, TITLE_BG)
     _center_text(d, W, y + 40, title, ft, TITLE_FG)
-    _center_text(d, W, y + 116, f"直销额度 · 第三方额度 · {today}", fs, SUB_FG)
+    _center_text(d, W, y + 116, f"直销额度 · 代销额度 · {today}", fs, SUB_FG)
     y += HDR_H + 24
 
     card_h = COL_HDR_H + len(results) * ROW_H + 24
     _rounded_rect(d, (PAD, y, W - PAD, y + card_h), CR, CARD)
-    d.text((IL, y + 18), "基金名称（基金代码）", fill=LABEL, font=fch)
+    d.text((IL, y + 18), "基金名称", fill=LABEL, font=fch)
+    _right_text(d, RETURN_X, y + 18, "近一年收益率", fch, LABEL)
     _right_text(d, DIRECT_X, y + 18, "直销额度", fch, LABEL)
-    _right_text(d, THIRD_X, y + 18, "第三方额度", fch, LABEL)
+    _right_text(d, AGENCY_X, y + 18, "代销额度", fch, LABEL)
 
     ry = y + COL_HDR_H
     for i, r in enumerate(results):
@@ -290,16 +329,27 @@ def generate_direct_sales(results: list[dict], output_path: str,
         # ``display`` 是配置中用于卡片的基金简称；优先使用它以确保三列内容
         # 在 1080px 画布内不会互相遮挡。
         name = r.get("display") or r.get("name", "")
-        code = r.get("code", "")
         direct = _fmt_limit(r.get("direct_sales_limit", ""))
         third = _fmt_limit(r.get("purchase_limit", ""))
-        d.text((IL, ry + 17), name, fill=TEXT, font=fn)
-        d.text((IL, ry + 54), f"（{code}）", fill=MUTED, font=fc)
+        # 暂时隐藏基金代码，给名称保留完整可读空间，避免与收益率覆盖。
+        name = _ellipsize(d, name, fn, RETURN_X - IL - 40)
+        d.text((IL, ry + 28), name, fill=TEXT, font=fn)
+        ret = _format_return_ui(r.get("return_1y", "—"))
+        rb = d.textbbox((0, 0), ret, font=fr)
+        ret_color = RED if ret != "—" and not ret.startswith("-") else GREEN if ret.startswith("-") else MUTED
+        d.text((RETURN_X - (rb[2] - rb[0]), ry + 28), ret, fill=ret_color, font=fr)
         _right_text(d, DIRECT_X, ry + 28, direct, fl,
                     RED if direct == "暂停" else GREEN if direct != "—" else MUTED)
-        _right_text(d, THIRD_X, ry + 28, third, fl,
+        _right_text(d, AGENCY_X, ry + 28, third, fl,
                     RED if third == "暂停" else GREEN if third != "—" else MUTED)
         ry += ROW_H
+
+    # 独立底部免责声明区域，不与最后一行数据相连。
+    disclaimer = "免责声明：数据仅供参考，不构成投资建议；额度以基金公司及销售机构实时规则为准"
+    disclaimer_font = _font(16)
+    disclaimer_box = d.textbbox((0, 0), disclaimer, font=disclaimer_font)
+    d.text(((W - (disclaimer_box[2] - disclaimer_box[0])) / 2, H - 38), disclaimer,
+            fill=MUTED, font=disclaimer_font)
 
     img = _add_watermark(img)
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
