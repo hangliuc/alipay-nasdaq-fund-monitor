@@ -1156,10 +1156,10 @@
         "purchase_status": "限大额",
         "purchase_limit": "500元"
       },
-      "022814": {
+      "022184": {
         "name": "富国全球科技互联网股票(QDII)C",
-        "purchase_status": "未知",
-        "purchase_limit": "未知"
+        "purchase_status": "限大额",
+        "purchase_limit": "50万元"
       },
       "017204": {
         "name": "华宝海外科技股票(QDII-LOF)C",
@@ -2000,10 +2000,10 @@
           "purchase_status": "限大额",
           "purchase_limit": "500元"
         },
-        "022814": {
+        "022184": {
           "name": "富国全球科技互联网股票(QDII)C",
-          "purchase_status": "未知",
-          "purchase_limit": "未知"
+          "purchase_status": "限大额",
+          "purchase_limit": "50万元"
         },
         "017204": {
           "name": "华宝海外科技股票(QDII-LOF)C",

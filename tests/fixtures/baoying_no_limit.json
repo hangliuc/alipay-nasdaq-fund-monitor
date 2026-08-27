@@ -1,0 +1,11 @@
+{
+  "code": "0000000",
+  "msg": "查询基金详情",
+  "record": [[{
+    "fundcode": "027662",
+    "fundname": "宝盈欣享稳健配置6个月持有混合发起（FOF）A",
+    "fundstatus": "6",
+    "td_sum_max_20": "",
+    "td_sum_max_22": ""
+  }]]
+}

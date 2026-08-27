@@ -9,4 +9,5 @@ build/
 /output/
 .vscode/
 .DS_Store
-docs/*.png
+# 运行时状态和渲染产物。history.json 当前被跟踪，保留它以避免影响现有部署。
+data/cards/

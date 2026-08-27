@@ -11,8 +11,8 @@
 """
 
 import re
-import time
 import random
+import time
 import requests
 from typing import Optional
 
@@ -117,14 +117,10 @@ def fetch_one(code: str, timeout: int = 15) -> SourceRecord:
 
 
 def fetch_many(codes: list[str], delay: tuple = (1.0, 2.5)) -> dict[str, SourceRecord]:
-    """
-    批量抓取（HTML 是单只一次请求，控制速率防封）。
-    返回 {code: SourceRecord}。
-    """
+    """兼容入口：按速率限制逐只抓取 HTML 详情页。"""
     out = {}
-    n = len(codes)
     for i, code in enumerate(codes):
         out[code] = fetch_one(code)
-        if i < n - 1:
+        if i < len(codes) - 1:
             time.sleep(random.uniform(*delay))
     return out

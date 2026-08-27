@@ -16,10 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# 数据和图片持久化目录
-RUN mkdir -p /app/data /app/docs
+# 数据和图片持久化目录（项目说明文档不作为运行时输出目录）
+RUN mkdir -p /app/data/cards
 
-# cron 定时任务：每天 8:40 北京时间执行
+# cron 定时任务：每天 7:16 北京时间执行
 # 容器内设置为 Asia/Shanghai 时区
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone

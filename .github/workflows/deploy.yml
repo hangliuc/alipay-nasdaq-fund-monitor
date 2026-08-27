@@ -68,7 +68,7 @@ jobs:
             fi
 
             # 卡片图能否通过 nginx 访问（飞书按钮链接指向这里）
-            LATEST=$(ls -t docs/*.png 2>/dev/null | head -1)
+            LATEST=$(ls -t data/cards/*.png 2>/dev/null | head -1)
             if [ -n "$LATEST" ]; then
               NAME=$(basename "$LATEST")
               CODE=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:8900/$NAME")
@@ -79,5 +79,5 @@ jobs:
                 exit 1
               fi
             else
-              echo "ℹ️  docs/ 下暂无卡片图，跳过 nginx 检查"
+              echo "ℹ️  data/cards/ 下暂无卡片图，跳过 nginx 检查"
             fi

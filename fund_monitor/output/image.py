@@ -245,3 +245,64 @@ def generate(results: list[dict], output_path: str,
     img.save(output_path, "PNG", quality=95)
     print(f"📸 卡片已生成: {output_path}")
     return output_path
+
+
+def generate_direct_sales(results: list[dict], output_path: str,
+                          title: str = "QDII 基金额度对比") -> str:
+    """生成独立的直销/第三方额度对比小红书卡片。"""
+    # 先看第三方额度；额度相同时再看直销额度。两项都相同则以代码保证稳定排序。
+    results = sorted(
+        results,
+        key=lambda item: (
+            -_limit_val(item.get("purchase_limit", "")),
+            -_limit_val(item.get("direct_sales_limit", "")),
+            item.get("code", ""),
+        ),
+    )
+    W, PAD, CPAD, CR = 1080, 60, 40, 24
+    HDR_H, COL_HDR_H, ROW_H = 180, 62, 94
+    IL, IR = PAD + CPAD, W - PAD - CPAD
+    DIRECT_X, THIRD_X = 690, IR
+    H = PAD + HDR_H + 24 + COL_HDR_H + len(results) * ROW_H + 24 + PAD
+
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+    ft, fs = _font(48), _font(28)
+    fch, fn, fc, fl = _font(25), _font(29), _font(23), _font(34)
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    y = PAD
+    _rounded_rect(d, (PAD, y, W - PAD, y + HDR_H), CR, TITLE_BG)
+    _center_text(d, W, y + 40, title, ft, TITLE_FG)
+    _center_text(d, W, y + 116, f"直销额度 · 第三方额度 · {today}", fs, SUB_FG)
+    y += HDR_H + 24
+
+    card_h = COL_HDR_H + len(results) * ROW_H + 24
+    _rounded_rect(d, (PAD, y, W - PAD, y + card_h), CR, CARD)
+    d.text((IL, y + 18), "基金名称（基金代码）", fill=LABEL, font=fch)
+    _right_text(d, DIRECT_X, y + 18, "直销额度", fch, LABEL)
+    _right_text(d, THIRD_X, y + 18, "第三方额度", fch, LABEL)
+
+    ry = y + COL_HDR_H
+    for i, r in enumerate(results):
+        if i:
+            d.line([(IL, ry), (IR, ry)], fill=DIVIDER, width=1)
+        # ``display`` 是配置中用于卡片的基金简称；优先使用它以确保三列内容
+        # 在 1080px 画布内不会互相遮挡。
+        name = r.get("display") or r.get("name", "")
+        code = r.get("code", "")
+        direct = _fmt_limit(r.get("direct_sales_limit", ""))
+        third = _fmt_limit(r.get("purchase_limit", ""))
+        d.text((IL, ry + 17), name, fill=TEXT, font=fn)
+        d.text((IL, ry + 54), f"（{code}）", fill=MUTED, font=fc)
+        _right_text(d, DIRECT_X, ry + 28, direct, fl,
+                    RED if direct == "暂停" else GREEN if direct != "—" else MUTED)
+        _right_text(d, THIRD_X, ry + 28, third, fl,
+                    RED if third == "暂停" else GREEN if third != "—" else MUTED)
+        ry += ROW_H
+
+    img = _add_watermark(img)
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    img.save(output_path, "PNG", quality=95)
+    print(f"📸 直销额度对比卡片已生成: {output_path}")
+    return output_path

@@ -1,0 +1,20 @@
+{
+  "code": "ETS-5BP00000",
+  "message": "操作成功",
+  "data": {
+    "currentDate": "2026年08月26日",
+    "fundlist": [
+      {
+        "transactionState": 0,
+        "fundCode": "000002",
+        "fundName": "南方稳健成长混合B",
+        "sgStatus": "1",
+        "shStatus": 1,
+        "dtStatus": "1",
+        "zhrStatus": "1",
+        "zhcStatus": "1",
+        "remark": ""
+      }
+    ]
+  }
+}

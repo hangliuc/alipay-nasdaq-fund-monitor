@@ -8,11 +8,13 @@ from datetime import datetime
 
 from fund_monitor.config import Config
 from fund_monitor.fetch import fetch_all
+from fund_monitor.fetch.direct_sales import fetch_official_limits, has_direct_sales_support
 from fund_monitor.storage import History
-from fund_monitor.output import generate, FeishuNotifier
+from fund_monitor.output import generate, generate_direct_sales, FeishuNotifier
 from fund_monitor.trading_day import is_trading_day
 
-IMAGE_DIR = "docs"
+# 运行时产物与项目说明文档分离；该目录由 Docker/nginx 作为静态卡片目录挂载。
+IMAGE_DIR = "data/cards"
 
 
 def main():
@@ -89,6 +91,33 @@ def main():
                      subtitle_prefix="主动管理 QDII")
             if config.image_base_url:
                 image_urls.append(f"{config.image_base_url}/{name}")
+
+    # ── 直销/第三方额度对比卡片 ──
+    # 独立于原有主动、被动卡片：只抓取已接入直销额度能力的公司，避免对尚未
+    # 接入的公司发起无效官网请求，也不在卡片中展示它们。
+    if config.active_funds and not args.no_image:
+        direct_funds = [
+            fund for fund in _filter(config.active_funds, args.fund_codes)
+            if has_direct_sales_support(fund)
+        ]
+        if direct_funds:
+            print(f"\n🚀 直销额度对比：查询 {len(direct_funds)} 只已接入基金...")
+            third_party_results = fetch_all(direct_funds)
+            direct_records = fetch_official_limits(direct_funds)
+            direct_by_code = {item["code"]: item for item in direct_records}
+            comparison_results = []
+            for item in third_party_results:
+                direct = direct_by_code.get(item["code"], {})
+                comparison_results.append({
+                    **item,
+                    "direct_sales_limit": direct.get("direct_sales_limit", "未获取"),
+                    "direct_sales_status": direct.get("direct_sales_status", ""),
+                })
+            name = f"direct_sales_{date_str}_{suffix}.png"
+            local_card_path = os.path.join(image_dir, name)
+            generate_direct_sales(comparison_results, local_card_path)
+            # 新卡片目前仅供本地预览，确认版式后再接入飞书图片列表。
+            print(f"👀 直销额度对比卡片本地预览: {local_card_path}")
 
     # ── 飞书通知 ──
     if not args.no_notify:

@@ -1,0 +1,21 @@
+{
+  "code": "0000000",
+  "msg": "查询基金详情",
+  "record": [[{
+    "fundcode": "019737",
+    "fundname": "宝盈纳斯达克100指数发起（QDII）C人民币",
+    "fund_fullname": "宝盈纳斯达克100指数发起式证券投资基金（QDII）",
+    "fundtype": "5",
+    "risklevel": "04",
+    "sharetype": "C",
+    "establishdate": "20240115",
+    "fundsize": "256826369.59",
+    "nav": "1.4585",
+    "navdate": "20260824",
+    "fundstatus": "0",
+    "td_sum_max_20": "100000.00",
+    "td_sum_max_22": "200000.00",
+    "currencytype": "156",
+    "managercode": "80000233"
+  }]]
+}

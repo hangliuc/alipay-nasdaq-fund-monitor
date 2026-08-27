@@ -10,7 +10,6 @@ services:
       - TZ=Asia/Shanghai
     volumes:
       - ./data:/app/data
-      - ./docs:/app/docs
 
   # nginx 提供图片访问（飞书按钮链接指向这里）
   nginx:
@@ -20,4 +19,4 @@ services:
     ports:
       - "8900:80"
     volumes:
-      - ./docs:/usr/share/nginx/html:ro
+      - ./data/cards:/usr/share/nginx/html:ro

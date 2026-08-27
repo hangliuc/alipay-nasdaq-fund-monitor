@@ -1,0 +1,33 @@
+{
+  "status": 1,
+  "message": "查询成功",
+  "data": {
+    "page": 0,
+    "size": 2000,
+    "total": 2,
+    "data": [
+      {
+        "fundCode": "015300",
+        "fundName": "华夏纳斯达克100ETF发起式联接(QDII)C",
+        "manager": "赵宗庭",
+        "tradeState": "0",
+        "riskLevel": "R4",
+        "riskLevelText": "中高风险(R4)",
+        "buildDate": "2022-04-13T16:00:00.000+00:00",
+        "fundType": "8",
+        "fundAliasName": "华夏纳斯达克100ETF发起式联接(QDII)C"
+      },
+      {
+        "fundCode": "002891",
+        "fundName": "华夏移动互联混合(QDII)(人民币)",
+        "manager": "郭琨研,刘平",
+        "tradeState": "1",
+        "riskLevel": "R4",
+        "riskLevelText": "中高风险(R4)",
+        "buildDate": "2016-12-13T16:00:00.000+00:00",
+        "fundType": "2",
+        "fundAliasName": "华夏移动互联混合(QDII)(人民币)"
+      }
+    ]
+  }
+}

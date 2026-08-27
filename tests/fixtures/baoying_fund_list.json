@@ -1,0 +1,36 @@
+{
+  "code": "0000000",
+  "msg": "成功",
+  "alllength": 2,
+  "record": [
+    [
+      {
+        "fundcode": "019737",
+        "fundname": "宝盈纳斯达克100指数发起（QDII）C人民币",
+        "fundtype": "5",
+        "risklevel": "04",
+        "sharetype": "C",
+        "fundstatus": "0",
+        "td_sum_max_20": "100000.00",
+        "td_sum_max_22": "200000.00"
+      },
+      {
+        "fundcode": "019737",
+        "fundname": "宝盈纳斯达克100指数发起（QDII）C人民币",
+        "fundtype": "5",
+        "risklevel": "04",
+        "sharetype": "C",
+        "fundstatus": "0"
+      },
+      {
+        "fundcode": "213009",
+        "fundname": "宝盈货币A",
+        "fundtype": "2",
+        "risklevel": "01",
+        "sharetype": "A",
+        "fundstatus": "0"
+      }
+    ],
+    [{"qryallfund": "1"}]
+  ]
+}

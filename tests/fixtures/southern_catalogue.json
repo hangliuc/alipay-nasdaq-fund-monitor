@@ -1,0 +1,33 @@
+{
+  "code": "ETS-5BP00000",
+  "message": "操作成功",
+  "data": {
+    "g_classify_fhb": [
+      {
+        "fundcode": "016453",
+        "fundname": "南方纳斯达克100指数发起（QDII）C",
+        "sectype": "股票型",
+        "riskLevel": "中高风险(R4)",
+        "nav": "2.2465",
+        "fdate": "20260824",
+        "asset": "4832996804.46",
+        "fundManagerName": "张其思",
+        "foundDateStr": "20221129",
+        "transactionState": 0
+      },
+      {
+        "fundcode": "000001",
+        "fundname": "南方稳健成长混合A",
+        "sectype": "混合型"
+      }
+    ],
+    "g_classify_all": [
+      {
+        "fundcode": "016453",
+        "fundname": "南方纳斯达克100指数发起（QDII）C",
+        "sectype": "股票型"
+      }
+    ],
+    "managerlist": [{"managerId": "361", "managerName": "张其思"}]
+  }
+}

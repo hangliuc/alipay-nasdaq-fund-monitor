@@ -1,0 +1,24 @@
+{
+  "code": "ETS-5BP00000",
+  "message": "操作成功",
+  "data": {
+    "fund_info": {
+      "fundCode": "016453",
+      "fundName": "南方纳斯达克100指数发起（QDII）C",
+      "fundNameEx": "南方纳斯达克100交易型开放式指数证券投资基金发起式联接基金（QDII）",
+      "fundDate": "20221129",
+      "basedetailType": "股票型",
+      "sgStatus": "1",
+      "shStatus": 1,
+      "dtStatus": 1
+    },
+    "fundReturn": {
+      "FDATE": "20260824",
+      "FUNDNAV": "2.2465",
+      "UPRATIO": "-0.89",
+      "re_year": "15.76"
+    },
+    "fundRiskRating": {"RISKRATING": "中高风险(R4)"},
+    "quarter": {"fundsize": "2057162940.08", "reportdate": "20260630"}
+  }
+}

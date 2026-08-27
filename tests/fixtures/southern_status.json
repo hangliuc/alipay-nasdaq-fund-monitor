@@ -1,0 +1,44 @@
+{
+  "code": "ETS-5BP00000",
+  "message": "操作成功",
+  "data": {
+    "currentDate": "2026年08月26日",
+    "fundlist": [
+      {
+        "transactionState": 0,
+        "status": 1,
+        "id": 593,
+        "fundCode": "016453",
+        "fundName": "南方纳斯达克100指数发起（QDII）C",
+        "sgStatus": "1",
+        "shStatus": 1,
+        "dtStatus": 1,
+        "zhrStatus": 1,
+        "zhcStatus": 1,
+        "remark": "1、自2026年7月9日起，本基金C类份额的大额申购（含定投和转换转入）限额调整为10元。"
+      },
+      {
+        "transactionState": 0,
+        "fundCode": "000001",
+        "fundName": "南方稳健成长混合A",
+        "sgStatus": "0",
+        "shStatus": 1,
+        "dtStatus": "0",
+        "zhrStatus": "1",
+        "zhcStatus": "1",
+        "remark": ""
+      },
+      {
+        "transactionState": 0,
+        "fundCode": "000002",
+        "fundName": "南方稳健成长混合B",
+        "sgStatus": "1",
+        "shStatus": 1,
+        "dtStatus": "1",
+        "zhrStatus": "1",
+        "zhcStatus": "1",
+        "remark": ""
+      }
+    ]
+  }
+}
