@@ -129,15 +129,24 @@ def _record_history(args, root, config, results, prefix):
 
 def _print_health(results: list[dict], group_label: str):
     """控制台打印数据源健康状况"""
-    by_src = {"jjjz": 0, "html": 0, "stale": 0, "none": 0}
+    by_src = {"akshare": 0, "html": 0, "stale": 0, "none": 0}
+    by_validation = {"matched": 0, "mismatch": 0, "akshare_only": 0,
+                     "html_only": 0, "stale": 0, "none": 0}
     warnings = []
     for r in results:
         by_src[r.get("source", "none")] = by_src.get(r.get("source", "none"), 0) + 1
+        validation = r.get("cross_validation", "none")
+        by_validation[validation] = by_validation.get(validation, 0) + 1
         for w in r.get("warnings", []) or []:
             warnings.append(f"  · {r.get('name', r['code'])}({r['code']}): {w}")
-    print(f"\n  📊 {group_label} 数据源：主源 jjjz={by_src['jjjz']} | "
-          f"备源 html={by_src['html']} | 历史兜底 stale={by_src['stale']} | "
+    print(f"\n  📊 {group_label} 数据源：AKShare={by_src['akshare']} | "
+          f"HTML 接管={by_src['html']} | 历史兜底={by_src['stale']} | "
           f"失败 none={by_src['none']}")
+    print(f"  🔍 {group_label} 交叉验证：一致={by_validation['matched']} | "
+          f"不一致={by_validation['mismatch']} | "
+          f"仅 AKShare={by_validation['akshare_only']} | "
+          f"仅 HTML={by_validation['html_only']} | "
+          f"历史={by_validation['stale']} | 失败={by_validation['none']}")
     if warnings:
         print(f"  ⚠️ {group_label} 数据警告：")
         for w in warnings:
@@ -169,7 +178,8 @@ def _format_health_for_feishu(items: list[dict]):
     lines = ["⚠️ **数据源健康提醒**：", ""]
     for it in items:
         tag = {"stale": "📦 历史兜底", "none": "❌ 抓取失败",
-               "html": "🔁 备源", "jjjz": "✅ 主源"}.get(it["source"], it["source"])
+               "html": "🔁 HTML 接管", "akshare": "✅ AKShare"}.get(
+                   it["source"], it["source"])
         lines.append(f"- [{it['group']}] {it['name']}({it['code']}) {tag}")
         for w in it["warnings"]:
             lines.append(f"    · {w}")

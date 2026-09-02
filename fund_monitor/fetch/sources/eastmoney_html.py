@@ -1,13 +1,11 @@
 """
-备用数据源：天天基金 HTML 详情页
+数据源：天天基金 HTML 详情页
 
 接口：http://fund.eastmoney.com/{code}.html
 特点：
-- 数据全（含近1年收益率，JJJZ 接口拿不到）
-- 但依赖 HTML class/正则，前端改版会失效，因此降级为备源
-- 本项目里它同时承担两个角色：
-    1. 限购信息的备份（JJJZ 失败时兜底）
-    2. 近1年收益率的唯一来源（不参与备份决策，仅用于卡片图渲染）
+- 含申购状态、限购额度和近1年收益率
+- 依赖 HTML class/正则，前端改版会失效，因此需要与 AKShare 交叉验证
+- 每次运行逐只请求，既作为 AKShare 的备用，也用于验证共同字段
 """
 
 import re
@@ -18,7 +16,7 @@ from typing import Optional
 
 from fund_monitor.fetch.sources.base import SourceRecord, empty_record
 
-FUND_URL = "http://fund.eastmoney.com/{code}.html"
+FUND_URL = "https://fund.eastmoney.com/{code}.html"
 
 HEADERS = {
     "User-Agent": (
@@ -26,7 +24,7 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     ),
-    "Referer": "http://fund.eastmoney.com/",
+        "Referer": "https://fund.eastmoney.com/",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 }

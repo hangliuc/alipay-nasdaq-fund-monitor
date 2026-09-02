@@ -10,7 +10,7 @@
 - nav_date          净值报告时间，"YYYY-MM-DD" 或 "MM-DD"，可空
 - error             失败原因，None 表示成功
 
-近1年收益率（return_1y）只有 HTML 源能提供，所以不在通用约定里。
+近1年收益率（return_1y）由 AKShare 和 HTML 源共同提供。
 """
 
 from typing import Optional, TypedDict
@@ -42,7 +42,7 @@ def empty_record(code: str) -> SourceRecord:
 
 def format_limit_yuan(value) -> str:
     """
-    把 JJJZ 的"日累计限定金额"数值（单位：元）格式化为统一字符串，
+    把 AKShare 的"日累计限定金额"数值（单位：元）格式化为统一字符串，
     与 HTML 解析的 purchase_limit 字段保持一致。
 
     例：50.0 → "50.00元"；50000.0 → "5.00万元"；None → "未知"

@@ -5,9 +5,16 @@ description: 为其他 agent 提供本项目 QDII 基金的申购限额、申购
 
 # QDII 基金雷达
 
-这是一个自包含 Skill。安装时只需复制本目录，不需要安装 QDII Radar 主项目或连接服务器。运行 `scripts/query.py` 时会直接访问天天基金和证监会公开数据源；该接口为只读操作，标准输出返回一份 JSON 文档。
+这是一个自包含 Skill。安装时只需复制本目录，不需要安装 QDII Radar 主项目或连接服务器。运行 `scripts/query.py` 时会通过 AKShare 批量查询，再逐只访问天天基金 HTML 详情页；该接口为只读操作，标准输出返回一份 JSON 文档。
 
-查询限额、申购状态和收益率只使用 Python 标准库。查询证监会市场分布前，需在 Skill 目录执行 `pip install -r requirements.txt` 安装可选的 PDF 解析依赖。查询过程中如果网络不可用，会尝试使用本机缓存；缓存默认位于用户缓存目录，也可用 `QDII_RADAR_CACHE` 自定义。
+安装依赖：
+
+```bash
+cd skills/qdii-fund-radar
+pip install -r requirements.txt
+```
+
+查询限额、申购状态、净值和收益率时，AKShare 作为批量主源，天天基金 HTML 详情页作为备用和交叉验证来源。两者都失败时，会尝试使用本机缓存；缓存默认位于用户缓存目录，也可用 `QDII_RADAR_CACHE` 自定义。查询证监会市场分布需要 `pdfplumber`。
 
 如需换一组基金，可通过 `--config PATH` 传入 JSON。配置可以沿用本项目的 `passive_funds`/`active_funds` 结构，也可以使用 `{"funds": [{"code": "...", "name": "...", "group": "passive"}]}` 结构。
 
@@ -21,7 +28,7 @@ description: 为其他 agent 提供本项目 QDII 基金的申购限额、申购
 
 支持以下过滤和排序参数：`--code CODE ...`、`--group passive|active|all`、`--status STATUS`、`--sort return_1y|purchase_limit|name`、`--limit N`。查询市场分布时可用 `--year YYYY` 指定报告年份；综合快照可加 `--include-market-distribution`。
 
-向用户或其他 agent 返回结果时，必须保留 `source`、`confidence`、`warnings` 和 `error`。`source=stale` 表示使用历史兜底数据。市场分布来自季度报告，不是实时持仓；不要根据这些字段推断投资建议或未来收益。
+向用户或其他 agent 返回结果时，必须保留 `source`、`quota_source`、`performance_source`、`cross_validation`、`confidence`、`warnings` 和 `error`。`source=stale` 表示使用历史兜底数据。`cross_validation` 可能为 `matched`、`mismatch`、`akshare_only`、`html_only`、`stale` 或 `none`。市场分布来自季度报告，不是实时持仓；不要根据这些字段推断投资建议或未来收益。
 
 示例：
 

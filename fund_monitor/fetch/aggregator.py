@@ -1,38 +1,16 @@
-"""
-数据聚合器：多源编排 + 交叉验证 + 历史快照兜底
-
-数据源职责：
-  ┌──────────────────┬──────────┬──────────────────────────────────────┐
-  │ 源               │ 角色     │ 提供字段                              │
-  ├──────────────────┼──────────┼──────────────────────────────────────┤
-  │ JJJZ (JSON)      │ 限购主源 │ 申购状态、限额、最新净值              │
-  │ RANKING (JSON)   │ 业绩主源 │ 近1年收益率、净值日期                 │
-  │ HTML (详情页)    │ 限购备源 │ 申购状态、限额（仅 JJJZ 失败时启用）  │
-  │ history.json     │ 兜底    │ 上次成功值                            │
-  └──────────────────┴──────────┴──────────────────────────────────────┘
-
-  正常路径：仅 2 个 HTTP 请求（JJJZ + RANKING），不调 HTML
-  降级路径：JJJZ 失败 → 逐只 HTML（与改造前相同）
-
-每条结果新增字段（不破坏旧字段）：
-  - source       "jjjz" / "html" / "stale" / "none"（限购数据来源）
-  - confidence   "high" / "medium" / "low"
-  - warnings     list[str]，发现的不一致或异常
-"""
+"""AKShare + 天天基金 HTML 双源聚合、交叉验证和历史兜底。"""
 
 import logging
 import random
+import re
 import time
 from typing import Optional
 
-from fund_monitor.fetch.sources import eastmoney_html, eastmoney_jjjz, eastmoney_ranking
-from fund_monitor.fetch.sources import csrc_market_distribution
+from fund_monitor.fetch.sources import akshare_source, csrc_market_distribution, eastmoney_html
 from fund_monitor.fetch.sources.base import SourceRecord, empty_record
 
 log = logging.getLogger(__name__)
 
-
-# ── 主入口 ────────────────────────────────────────
 
 def aggregate(
     fund_list: list[dict],
@@ -40,66 +18,55 @@ def aggregate(
     include_market_distribution: bool = False,
     market_distribution_year: int = 2026,
 ) -> list[dict]:
-    """
-    Args:
-        fund_list:       [{"code": "008971", "name": "...", "display": "..."}, ...]
-        history_latest:  history.json 中对应 namespace 下的 latest 快照，用于兜底
-                         结构：{code: {"name", "purchase_status", "purchase_limit"}}
-    Returns:
-        list[dict]，每条至少包含 code/name/purchase_status/purchase_limit/return_1y/error，
-        以及新增的 source/confidence/warnings。
+    """按固定双源策略批量获取并合并基金数据。
+
+    每次运行都会先批量调用 AKShare，再逐只请求天天基金 HTML 详情页。
+    两个来源都成功时进行字段级交叉验证；一方失败时由另一方接管；
+    两方都失败时使用 ``history_latest``。
     """
     history_latest = history_latest or {}
     total = len(fund_list)
 
-    # ── 1. 限购主源：JJJZ ──
-    print("  ▶ 主源 JJJZ：拉取全市场限购快照...", end=" ", flush=True)
-    try:
-        jjjz_snap = eastmoney_jjjz.fetch_market_snapshot()
-        print(f"OK（{len(jjjz_snap)} 只）")
-    except Exception as e:
-        jjjz_snap = None
-        print(f"❌ {e}")
-
-    # ── 2. 业绩主源：RANKING ──
-    print("  ▶ 主源 RANKING：拉取全市场业绩快照...", end=" ", flush=True)
-    try:
-        rank_snap = eastmoney_ranking.fetch_market_snapshot()
-        print(f"OK（{len(rank_snap)} 只）")
-    except Exception as e:
-        rank_snap = None
-        print(f"❌ {e}")
-
-    # ── 3. HTML 备源：仅 JJJZ 失败、缺漏，或 RANKING 全挂时启用 ──
-    html_records: dict[str, SourceRecord] = {}
-    html_needed_codes = _decide_html_codes(fund_list, jjjz_snap, rank_snap)
-    if html_needed_codes:
-        reason = _html_reason(jjjz_snap, rank_snap)
-        print(f"  ▶ 备源 HTML：{reason}，逐只抓取 {len(html_needed_codes)} 只...")
-        for i, code in enumerate(html_needed_codes):
-            print(f"    [{i + 1}/{len(html_needed_codes)}] {code}...")
-            html_records[code] = eastmoney_html.fetch_one(code)
-            if i < len(html_needed_codes) - 1:
-                time.sleep(random.uniform(1.0, 2.5))
+    print("  ▶ AKShare：批量拉取申购状态、限额和净值...", end=" ", flush=True)
+    purchase_snap, purchase_error = _safe_snapshot(akshare_source.fetch_purchase_snapshot)
+    if purchase_error:
+        print(f"❌ {purchase_error}")
     else:
-        print(f"  ▶ 备源 HTML：跳过（{total} 只全部命中 JJJZ + RANKING）")
+        print(f"OK（{len(purchase_snap)} 只）")
+
+    print("  ▶ AKShare：批量拉取近一年收益率...", end=" ", flush=True)
+    rank_snap, rank_error = _safe_snapshot(akshare_source.fetch_rank_snapshot)
+    if rank_error:
+        print(f"❌ {rank_error}")
+    else:
+        print(f"OK（{len(rank_snap)} 只）")
+
+    html_records: dict[str, SourceRecord] = {}
+    print(f"  ▶ 天天基金 HTML 详情页：逐只获取并交叉验证 {total} 只...")
+    for i, fund in enumerate(fund_list):
+        code = fund["code"]
+        print(f"    [{i + 1}/{total}] {code}...")
+        html_records[code] = eastmoney_html.fetch_one(code)
+        if i < total - 1:
+            time.sleep(random.uniform(1.0, 2.5))
 
     market_snap = {}
     if include_market_distribution:
         print(f"  ▶ CSRC：拉取 {market_distribution_year} 年季报市场分布...")
         market_snap = csrc_market_distribution.fetch_many(fund_list, year=market_distribution_year)
 
-    # ── 4. 合并 ──
     results = []
     for fund in fund_list:
         code = fund["code"]
         merged = _merge(
             code=code,
-            jjjz=jjjz_snap.get(code) if jjjz_snap else None,
-            ranking=rank_snap.get(code) if rank_snap else None,
+            ak_purchase=purchase_snap.get(code),
+            ak_rank=rank_snap.get(code),
             html=html_records.get(code),
             history=history_latest.get(code),
             cfg_name=fund.get("name", ""),
+            purchase_error=purchase_error,
+            rank_error=rank_error,
         )
         if fund.get("display"):
             merged["display"] = fund["display"]
@@ -110,124 +77,165 @@ def aggregate(
     return results
 
 
-def _decide_html_codes(
-    fund_list: list[dict],
-    jjjz_snap: Optional[dict],
-    rank_snap: Optional[dict],
-) -> list[str]:
-    """
-    决定哪些基金需要走 HTML 备源。触发条件（任一）：
-    - JJJZ 整体失败 → 全员上 HTML 取限购
-    - 该 code 在 JJJZ 中缺失 → 单独上 HTML 补限购
-    - RANKING 整体失败 → 全员上 HTML 补收益率
-    - 该 code 在 RANKING 中缺失 → 单独上 HTML 补收益率
-    """
-    codes = []
-    for f in fund_list:
-        code = f["code"]
-        miss_jjjz = jjjz_snap is None or code not in jjjz_snap
-        miss_rank = rank_snap is None or code not in rank_snap
-        if miss_jjjz or miss_rank:
-            codes.append(code)
-    return codes
+def _safe_snapshot(fetcher):
+    try:
+        return fetcher(), None
+    except Exception as exc:
+        return {}, str(exc)
 
-
-def _html_reason(jjjz_snap: Optional[dict], rank_snap: Optional[dict]) -> str:
-    parts = []
-    if jjjz_snap is None:
-        parts.append("JJJZ 全挂")
-    if rank_snap is None:
-        parts.append("RANKING 全挂")
-    if not parts:
-        parts.append("部分基金缺漏")
-    return "、".join(parts)
-
-
-# ── 合并单条 ───────────────────────────────────────
 
 def _merge(
     code: str,
-    jjjz: Optional[SourceRecord],
-    ranking: Optional[SourceRecord],
+    ak_purchase: Optional[SourceRecord],
+    ak_rank: Optional[SourceRecord],
     html: Optional[SourceRecord],
     history: Optional[dict],
     cfg_name: str,
+    purchase_error: Optional[str],
+    rank_error: Optional[str],
 ) -> dict:
-    """
-    单条记录的多源合并决策。
-    """
     out = empty_record(code)
-    out["warnings"] = []
-    out["source"] = "none"
-    out["confidence"] = "low"
-
-    # ── 收益率：RANKING 优先，HTML 兜底 ──
-    return_1y = ""
-    if ranking and ranking.get("return_1y"):
-        return_1y = ranking["return_1y"]
-    elif html and html.get("return_1y"):
-        return_1y = html["return_1y"]
-    out["return_1y"] = return_1y
-
-    # ── 限购数据：JJJZ → HTML → history → 失败 ──
-    jjjz_ok = _has_status(jjjz)
-    html_ok = _has_status(html)
-
-    # A. JJJZ 成功
-    if jjjz_ok:
-        out.update({
-            "name": jjjz.get("name") or cfg_name,
-            "purchase_status": jjjz["purchase_status"],
-            "purchase_limit": jjjz.get("purchase_limit", "未知"),
-            "nav": jjjz.get("nav"),
-            "nav_date": jjjz.get("nav_date", ""),
-            "source": "jjjz",
-            "confidence": "high",
-            "error": None,
-        })
-        # 交叉验证：HTML 也成功时（即 JJJZ 没覆盖到的情况以外，这里基本不会发生）
-        if html_ok:
-            warns = _cross_check(jjjz, html)
-            if warns:
-                out["warnings"].extend(warns)
-                out["confidence"] = "medium"
-        return out
-
-    # B. JJJZ 失败、HTML 接管
-    if html_ok:
-        out.update({
-            "name": html.get("name") or cfg_name,
-            "purchase_status": html["purchase_status"],
-            "purchase_limit": html.get("purchase_limit", "未知"),
-            "source": "html",
-            "confidence": "medium",
-            "error": None,
-        })
-        out["warnings"].append("主源 JJJZ 失败，已回落 HTML")
-        return out
-
-    # C. 主备都失败，回退历史
-    if history:
-        out.update({
-            "name": history.get("name") or cfg_name,
-            "purchase_status": history.get("purchase_status", "未知"),
-            "purchase_limit": history.get("purchase_limit", "未知"),
-            "source": "stale",
-            "confidence": "low",
-            "error": "主备源均失败，使用上次历史值",
-        })
-        out["warnings"].append("⚠️ 数据陈旧：主备源均失败，回退到上次记录")
-        return out
-
-    # D. 全军覆没
     out.update({
-        "name": cfg_name,
-        "error": _first_error(jjjz, html) or "主备源均失败且无历史记录",
+        "warnings": [],
         "source": "none",
         "confidence": "low",
+        "quota_source": "none",
+        "performance_source": "none",
+        "cross_validation": "not_available",
     })
-    out["warnings"].append(f"❌ 主备源均失败且无历史记录: {out['error']}")
+
+    ak_purchase_ok = _has_status(ak_purchase)
+    html_ok = _has_status(html)
+    rank_ok = _has_performance(ak_rank)
+    html_return_ok = bool(html and html.get("return_1y"))
+
+    # 字段级选择：AKShare 优先，HTML 接管，最后使用历史限购值。
+    if ak_purchase_ok:
+        quota_source = "akshare"
+        status = ak_purchase["purchase_status"]
+        limit = ak_purchase.get("purchase_limit", "未知")
+    elif html_ok:
+        quota_source = "html"
+        status = html["purchase_status"]
+        limit = html.get("purchase_limit", "未知")
+    elif history:
+        quota_source = "stale"
+        status = history.get("purchase_status", "未知")
+        limit = history.get("purchase_limit", "未知")
+    else:
+        quota_source = "none"
+        status = "未知"
+        limit = "未知"
+
+    if rank_ok:
+        performance_source = "akshare"
+        return_1y = ak_rank.get("return_1y", "")
+    elif html_return_ok:
+        performance_source = "html"
+        return_1y = html.get("return_1y", "")
+    else:
+        performance_source = "none"
+        return_1y = ""
+
+    # AKShare 的净值优先，两个批量结果之间再互相补充。
+    nav, nav_date = _first_value(
+        (ak_purchase, "nav", "nav_date"),
+        (ak_rank, "nav", "nav_date"),
+        (html, "nav", "nav_date"),
+    )
+    name = _first_text(ak_purchase, "name") or _first_text(ak_rank, "name") \
+        or _first_text(html, "name") or cfg_name
+
+    out.update({
+        "name": name,
+        "purchase_status": status,
+        "purchase_limit": limit,
+        "nav": nav,
+        "nav_date": nav_date,
+        "return_1y": return_1y,
+        "quota_source": quota_source,
+        "performance_source": performance_source,
+        "source": quota_source,
+    })
+
+    warnings = []
+    if purchase_error:
+        warnings.append(f"AKShare 申购数据不可用: {purchase_error}")
+    if rank_error:
+        warnings.append(f"AKShare 收益数据不可用: {rank_error}")
+    if html and html.get("error"):
+        warnings.append(f"天天基金 HTML 详情页失败: {html['error']}")
+
+    validation_warnings = _cross_check(ak_purchase, ak_rank, html)
+    warnings.extend(validation_warnings)
+
+    if ak_purchase_ok and (html_ok or html_return_ok):
+        out["cross_validation"] = "mismatch" if validation_warnings else "matched"
+    elif ak_purchase_ok or rank_ok:
+        out["cross_validation"] = "akshare_only"
+    elif html_ok or html_return_ok:
+        out["cross_validation"] = "html_only"
+    elif history:
+        out["cross_validation"] = "stale"
+    else:
+        out["cross_validation"] = "none"
+
+    if quota_source == "none":
+        out["error"] = _first_error(ak_purchase, html) or purchase_error \
+            or "AKShare 和天天基金 HTML 详情页均失败且无历史记录"
+        warnings.append(f"❌ 无可用限购数据: {out['error']}")
+    elif quota_source == "stale":
+        out["error"] = "AKShare 和天天基金 HTML 详情页均失败，使用上次历史值"
+        warnings.append("⚠️ 数据陈旧：实时双源均失败，回退到上次记录")
+    else:
+        out["error"] = None
+
+    out["warnings"] = _dedupe(warnings)
+    out["confidence"] = _confidence(quota_source, performance_source, out["cross_validation"])
     return out
+
+
+def _confidence(quota_source: str, performance_source: str, validation: str) -> str:
+    if quota_source == "none":
+        return "low"
+    if quota_source == "stale":
+        return "low"
+    if validation == "mismatch":
+        return "medium"
+    if quota_source == "html" or performance_source == "html":
+        return "medium"
+    return "high"
+
+
+def _cross_check(
+    ak_purchase: Optional[SourceRecord],
+    ak_rank: Optional[SourceRecord],
+    html: Optional[SourceRecord],
+) -> list[str]:
+    """比较 AKShare 与天天基金 HTML 的共同字段。"""
+    warnings = []
+    if not _has_status(ak_purchase) or not _has_status(html):
+        return warnings
+
+    ak_status = ak_purchase.get("purchase_status", "")
+    html_status = html.get("purchase_status", "")
+    if not _status_compat(ak_status, html_status):
+        warnings.append(f"交叉验证不一致：状态 AKShare={ak_status} / HTML={html_status}")
+
+    if _status_class(ak_status) in ("limited", "unknown") \
+            and _status_class(html_status) in ("limited", "unknown"):
+        ak_limit = ak_purchase.get("purchase_limit", "")
+        html_limit = html.get("purchase_limit", "")
+        if ak_limit and html_limit and not _limit_compat(ak_limit, html_limit):
+            warnings.append(f"交叉验证不一致：限额 AKShare={ak_limit} / HTML={html_limit}")
+
+    if ak_rank and ak_rank.get("return_1y") and html.get("return_1y") \
+            and not _number_compat(ak_rank["return_1y"], html["return_1y"], 0.05):
+        warnings.append(
+            f"交叉验证不一致：近1年收益率 AKShare={ak_rank['return_1y']} "
+            f"/ HTML={html['return_1y']}"
+        )
+    return warnings
 
 
 def _has_status(rec: Optional[SourceRecord]) -> bool:
@@ -237,77 +245,72 @@ def _has_status(rec: Optional[SourceRecord]) -> bool:
     )
 
 
-# ── 交叉验证 ──────────────────────────────────────
+def _has_performance(rec: Optional[SourceRecord]) -> bool:
+    return bool(rec and not rec.get("error") and (rec.get("return_1y") or rec.get("nav")))
 
-def _cross_check(jjjz: SourceRecord, html: SourceRecord) -> list[str]:
-    """JJJZ 与 HTML 的限购结果比对，返回告警列表。"""
-    warns = []
 
-    js = jjjz.get("purchase_status", "")
-    hs = html.get("purchase_status", "")
-    status_ok = (not js or not hs) or _status_compat(js, hs)
-    if not status_ok:
-        warns.append(f"状态不一致: JJJZ={js} / HTML={hs}")
+def _first_value(*sources):
+    for source, value_key, date_key in sources:
+        if source and source.get(value_key) is not None:
+            return source.get(value_key), source.get(date_key, "")
+    return None, ""
 
-    # 状态都为"暂停/开放"时跳过限额比对（限额此时无意义，避免噪音）
-    j_class = _status_class(js)
-    h_class = _status_class(hs)
-    if status_ok and j_class in ("limited", "unknown") and h_class in ("limited", "unknown"):
-        jl = jjjz.get("purchase_limit", "")
-        hl = html.get("purchase_limit", "")
-        if jl and hl and not _limit_compat(jl, hl):
-            warns.append(f"限额不一致: JJJZ={jl} / HTML={hl}")
 
-    return warns
+def _first_text(source: Optional[SourceRecord], key: str) -> str:
+    return str(source.get(key, "")).strip() if source and source.get(key) else ""
 
 
 def _status_compat(a: str, b: str) -> bool:
-    if a == b:
-        return True
-    return _status_class(a) == _status_class(b)
+    return a == b or _status_class(a) == _status_class(b)
 
 
-def _status_class(s: str) -> str:
-    if "暂停" in s:
+def _status_class(status: str) -> str:
+    if "暂停" in status:
         return "suspended"
-    if "限大额" in s or "限购" in s:
+    if "限大额" in status or "限购" in status:
         return "limited"
-    if "开放" in s:
+    if "开放" in status:
         return "open"
     return "unknown"
 
 
 def _limit_compat(a: str, b: str) -> bool:
-    if a == b:
+    if "不限" in a and "不限" in b or "暂停" in a and "暂停" in b:
         return True
-    if ("不限" in a) and ("不限" in b):
-        return True
-    if ("暂停" in a) and ("暂停" in b):
-        return True
-    return _limit_to_yuan(a) == _limit_to_yuan(b)
+    av, bv = _limit_to_yuan(a), _limit_to_yuan(b)
+    return av is not None and bv is not None and abs(av - bv) < 0.01
 
 
-def _limit_to_yuan(s: str) -> Optional[float]:
-    import re
-    if not s or "未知" in s:
+def _limit_to_yuan(value: str) -> Optional[float]:
+    if not value or "未知" in value:
         return None
-    m = re.search(r"([\d,.]+)\s*万", s)
-    if m:
-        try:
-            return float(m.group(1).replace(",", "")) * 10000
-        except ValueError:
-            return None
-    m = re.search(r"([\d,.]+)", s)
-    if m:
-        try:
-            return float(m.group(1).replace(",", ""))
-        except ValueError:
-            return None
+    match = re.search(r"([\d,.]+)\s*万", value)
+    multiplier = 10000 if match else 1
+    if not match:
+        match = re.search(r"([\d,.]+)", value)
+    if not match:
+        return None
+    try:
+        return float(match.group(1).replace(",", "")) * multiplier
+    except ValueError:
+        return None
+
+
+def _number_compat(a: str, b: str, tolerance: float) -> bool:
+    def parse(value):
+        match = re.search(r"-?[\d,.]+", value or "")
+        return float(match.group(0).replace(",", "")) if match else None
+
+    av, bv = parse(a), parse(b)
+    return av is not None and bv is not None and abs(av - bv) <= tolerance
+
+
+def _first_error(*records) -> Optional[str]:
+    for record in records:
+        if record and record.get("error"):
+            return record["error"]
     return None
 
 
-def _first_error(*recs) -> Optional[str]:
-    for r in recs:
-        if r and r.get("error"):
-            return r["error"]
-    return None
+def _dedupe(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))

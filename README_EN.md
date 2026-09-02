@@ -145,3 +145,7 @@ ruff check .
 ## Disclaimer
 
 This project and its Agent Skill are intended only for querying, organizing, demonstrating, and reminding users about publicly available information. They do not constitute investment advice, a promise of returns, a recommendation to buy or sell, or any other financial service. Fund data may be delayed, incomplete, inaccurate, or unavailable due to changes in external pages and interfaces. Users should independently verify all information and bear responsibility for their own investment decisions and risks. The project authors are not liable for any direct or indirect loss resulting from use of this project.
+
+## Acknowledgement
+
+We thank [AKShare](https://github.com/akfamily/akshare) and Tiantian Fund (天天基金) for providing public fund data and query channels. This project only retrieves, organizes, and presents publicly available information; please refer to the respective data sources for the latest and most accurate data.

@@ -162,7 +162,7 @@ docker compose run --rm monitor python main.py --force --dry-run
 
 详见 [`docs/data-acquisition-flow.md`](docs/data-acquisition-flow.md)。每条结果包含：
 
-- `source`：`jjjz`、`html`、`stale` 或 `none`。
+- `source`：`akshare`、`html`、`stale` 或 `none`。
 - `confidence`：当前结果的可信度。
 - `warnings`：数据源切换、陈旧或不一致提醒。
 - `error`：最终查询失败时的错误信息。
@@ -185,10 +185,14 @@ ruff check .
 
 ## 注意事项
 
-- 天天基金和证监会页面属于外部数据源，接口或页面变化可能导致降级或失败。
+- AKShare 和天天基金页面属于外部数据源，接口或页面变化可能导致降级或失败。
 - `data/history.json` 用于状态变化比较，生产部署时应持久化并定期备份。
 - `data/cards/` 是运行时生成目录，不应作为源码提交。
 
 ## 免责声明
 
 本项目及其 Agent Skill 仅用于公开信息的查询、整理、技术演示和提醒，不构成任何形式的投资建议、收益承诺、买卖推荐或其他金融服务。基金数据可能存在延迟、缺失、错误或因页面和接口变化而无法获取的情况；任何查询结果均不应作为投资决策的唯一依据。使用者应自行核实信息并独立承担投资判断和相关风险，项目作者不对因使用本项目造成的任何直接或间接损失承担责任。
+
+## Acknowledgement
+
+感谢 [AKShare](https://github.com/akfamily/akshare) 和天天基金提供公开的基金数据与查询渠道。本项目仅对这些公开信息进行获取、整理和展示，具体数据以相关数据源的最新信息为准。
