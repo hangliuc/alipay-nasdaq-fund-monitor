@@ -137,7 +137,6 @@ docker logs -f qdii-quota-radar
 `data/` 挂载在容器外，重建容器后历史与卡片仍会保留。`IMAGE_BASE_URL` 必须能从飞书客户端访问；内网地址通常无法让外网用户打开图片。
 
 ## 自动化与测试
-
 - 推送到 `main` 会触发 GitHub Actions，通过 SSH 更新部署服务器并重建 Compose 服务。
 - `Manual Run (on server)` 工作流可在服务器上手动真实运行，支持 `dry_run`、`no_history` 开关。
 - `Fund Monitor (manual test only)` 工作流可执行一次本地 dry-run。
@@ -148,6 +147,26 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
 部署工作流需要 GitHub Secrets：`SERVER_HOST`、`SERVER_USER`、`SSH_PRIVATE_KEY`、`FEISHU_WEBHOOK`。
+
+## Agent Skill 接入
+
+仓库内置 `skills/qdii-fund-radar/`，可供其他 agent 读取并调用。它提供只读 JSON 查询接口：
+
+```bash
+# 限额与申购状态
+python3 skills/qdii-fund-radar/scripts/query.py --action quota
+
+# 按近一年收益率排序
+python3 skills/qdii-fund-radar/scripts/query.py --action performance --sort return_1y --limit 10
+
+# 证监会季报市场分布
+python3 skills/qdii-fund-radar/scripts/query.py --action market-distribution --code 008971 --year 2026
+
+# 综合统计
+python3 skills/qdii-fund-radar/scripts/query.py --action summary
+```
+
+支持按基金代码、被动/主动分组、申购状态过滤，以及限额/收益率/名称排序。返回值包含 `as_of`、`data`、`count` 和 `warnings`；agent 应同时展示 `source`、`confidence`，并明确标注历史兜底数据。市场分布是季报数据，不代表实时持仓。
 
 ## 项目结构
 
