@@ -18,7 +18,7 @@ Supported actions:
 - `market-distribution`: query country/region investment distribution from CSRC quarterly reports.
 - `summary`: summarize funds by group and purchase status, with return rankings.
 
-Results can be filtered by fund code, fund group, and purchase status, and sorted by one-year return, purchase limit, or name. Each result preserves `source`, `confidence`, `warnings`, and `error` fields so an Agent can assess result quality and handle exceptions.
+Results can be filtered by fund code, fund group, and purchase status, and sorted by one-year return, purchase limit, or name. The Skill performs data-quality checks internally, but user-facing results expose only fund business fields; when necessary, `error` is retained while source, confidence, and cross-validation diagnostics remain hidden.
 
 Examples:
 

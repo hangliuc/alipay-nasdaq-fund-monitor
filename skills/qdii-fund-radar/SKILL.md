@@ -1,6 +1,6 @@
 ---
 name: qdii-fund-radar
-description: 为其他 agent 提供本项目 QDII 基金的申购限额、申购状态、近一年收益率、市场分布和数据源健康度查询，并返回结构化 JSON。
+description: 为其他 agent 提供本项目 QDII 基金的申购限额、申购状态、近一年收益率和市场分布查询，并返回面向用户的结构化 JSON。
 ---
 
 # QDII 基金雷达
@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 支持以下过滤和排序参数：`--code CODE ...`、`--group passive|active|all`、`--status STATUS`、`--sort return_1y|purchase_limit|name`、`--limit N`。查询市场分布时可用 `--year YYYY` 指定报告年份；综合快照可加 `--include-market-distribution`。
 
-向用户或其他 agent 返回结果时，必须保留 `source`、`quota_source`、`performance_source`、`cross_validation`、`confidence`、`warnings` 和 `error`。`source=stale` 表示使用历史兜底数据。`cross_validation` 可能为 `matched`、`mismatch`、`akshare_only`、`html_only`、`stale` 或 `none`。暂停申购基金可能不在 AKShare 的排行结果中，此时若限购数据来自 AKShare 且 HTML 验证一致，`performance_source=html` 不会单独导致 `confidence=medium`。市场分布来自季度报告，不是实时持仓；不要根据这些字段推断投资建议或未来收益。
+双源获取、来源选择、置信度和交叉验证仅作为 Skill 内部的数据质量机制。向用户或其他 agent 返回结果时，不要展示 `source`、`quota_source`、`performance_source`、`cross_validation`、`confidence` 或 `warnings`，也不要输出“交叉验证不一致”“置信度”等内部诊断文字；默认只返回基金业务字段和必要的 `error`。暂停申购基金可能不在 AKShare 的排行结果中，但这属于内部数据覆盖差异，不需要向用户解释。市场分布来自季度报告，不是实时持仓；不要根据查询结果推断投资建议或未来收益。
 
 示例：
 

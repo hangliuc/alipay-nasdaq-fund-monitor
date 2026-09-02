@@ -519,8 +519,9 @@ def query(options: dict) -> dict:
     if options.get("status"):
         rows = [r for r in rows if options["status"] in r.get("purchase_status", "")]
     action = options.get("action", "snapshot")
-    common = ("code", "name", "display", "group", "source", "quota_source",
-              "performance_source", "cross_validation", "confidence", "warnings", "error")
+    # 双源、置信度和交叉验证只用于 Skill 内部决策，不暴露给最终用户。
+    # 这样 Agent 可以直接消费基金业务字段，不会把内部数据质量诊断渲染成用户报告。
+    common = ("code", "name", "display", "group", "error")
     fields = {
         "quota": common + ("purchase_status", "purchase_limit"),
         "performance": common + ("return_1y", "nav", "nav_date"),
@@ -533,12 +534,23 @@ def query(options: dict) -> dict:
             "by_group": {g: sum(r.get("group") == g for r in rows) for g in ("passive", "active")},
             "by_status": {s: sum(r.get("purchase_status") == s for r in rows)
                           for s in sorted({r.get("purchase_status") for r in rows})},
-            "validation": {s: sum(r.get("cross_validation") == s for r in rows)
-                           for s in sorted({r.get("cross_validation") for r in rows})},
-            "top_return_1y": sorted(rows, key=lambda r: _number(r.get("return_1y")) or -1e9, reverse=True)[:10],
+            "top_return_1y": [
+                {key: row.get(key) for key in ("code", "name", "display", "group",
+                                                "return_1y", "nav", "nav_date", "error")}
+                for row in sorted(rows, key=lambda r: _number(r.get("return_1y")) or -1e9,
+                                  reverse=True)[:10]
+            ],
         }
     else:
-        data = [{key: row.get(key) for key in fields[action]} for row in rows] if action in fields else rows
+        if action in fields:
+            data = [{key: row.get(key) for key in fields[action]} for row in rows]
+        else:
+            data = [{key: row.get(key) for key in (
+                "code", "name", "display", "group", "purchase_status", "purchase_limit",
+                "return_1y", "nav", "nav_date", "market_distribution",
+                "market_distribution_report_id", "market_distribution_year",
+                "market_distribution_error", "error",
+            )} for row in rows]
         sort_key = options.get("sort")
         if sort_key:
             data.sort(key=lambda row: row.get(sort_key, "") if sort_key == "name"
@@ -550,7 +562,6 @@ def query(options: dict) -> dict:
         "action": action,
         "count": len(rows),
         "data": data,
-        "warnings": [f"{r['code']}: {w}" for r in rows for w in r.get("warnings", [])],
     }
 
 
