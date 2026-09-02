@@ -13,6 +13,8 @@ class Config:
     active_funds: list[dict] = field(default_factory=list)
     history_file: str = "data/history.json"
     image_base_url: str = ""
+    market_distribution_enabled: bool = False
+    market_distribution_year: int = 2026
 
     @property
     def all_webhooks(self) -> list[str]:
@@ -47,4 +49,6 @@ class Config:
             active_funds=raw.get("active_funds", []),
             history_file=raw.get("history_file", "data/history.json"),
             image_base_url=raw.get("image_base_url", ""),
+            market_distribution_enabled=raw.get("market_distribution_enabled", False),
+            market_distribution_year=raw.get("market_distribution_year", 2026),
         )

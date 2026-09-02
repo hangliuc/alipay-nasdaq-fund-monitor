@@ -52,7 +52,9 @@ def main():
         history_path = _resolve(root, config.history_file)
         passive_history = History(history_path, namespace="passive").latest_snapshot()
 
-        results = fetch_all(funds, history_latest=passive_history)
+        results = fetch_all(funds, history_latest=passive_history,
+                            include_market_distribution=(args.market_distribution or config.market_distribution_enabled),
+                            market_distribution_year=config.market_distribution_year)
         _print_health(results, "被动型")
         all_health_warnings.extend(_collect_health(results, "被动型"))
 
@@ -76,7 +78,9 @@ def main():
         history_path = _resolve(root, config.history_file)
         active_history = History(history_path, namespace="active").latest_snapshot()
 
-        results = fetch_all(funds, history_latest=active_history)
+        results = fetch_all(funds, history_latest=active_history,
+                            include_market_distribution=(args.market_distribution or config.market_distribution_enabled),
+                            market_distribution_year=config.market_distribution_year)
         _print_health(results, "主动型")
         all_health_warnings.extend(_collect_health(results, "主动型"))
 
@@ -183,6 +187,8 @@ def _parse_args():
     p.add_argument("--no-image", action="store_true", help="不生成图片")
     p.add_argument("--no-notify", action="store_true", help="不发送通知")
     p.add_argument("--force", action="store_true", help="强制运行（忽略节假日/周末检查）")
+    p.add_argument("--market-distribution", action="store_true",
+                   help="抓取证监会季报中的国家/地区市场投资分布")
     return p.parse_args()
 
 

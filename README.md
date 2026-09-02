@@ -173,3 +173,8 @@ tests/                          官网适配器 fixture 回归测试
 - [更新日志](CHANGELOG.md)
 - [适配器摘要](docs/adapters-summary-2026-08-26.md)
 - [各公司 Adapter 文档](docs/adapters/)
+# 基金市场分布
+
+可选抓取证监会基金信息披露网站季报中的“各个国家（地区）证券市场投资分布”。该功能独立于限额与收益率数据源，默认关闭；运行时使用 `--market-distribution`，或在 `config.json` 中将 `market_distribution_enabled` 设为 `true`。年份由 `market_distribution_year` 控制，默认 2026。
+
+基金配置可额外提供 `main_code`（A 类/主基金代码）和 `short_name`，用于证监会检索；未提供时回退到当前代码和名称。结果新增 `market_distribution`、`market_distribution_report_id` 字段，失败时写入 `market_distribution_error`，不会影响限购日报其它字段。

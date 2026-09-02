@@ -10,7 +10,9 @@ from typing import Optional
 from fund_monitor.fetch.aggregator import aggregate
 
 
-def fetch_all(fund_list: list[dict], history_latest: Optional[dict] = None) -> list[dict]:
+def fetch_all(fund_list: list[dict], history_latest: Optional[dict] = None,
+              include_market_distribution: bool = False,
+              market_distribution_year: int = 2026) -> list[dict]:
     """
     批量抓取基金信息。
 
@@ -24,7 +26,9 @@ def fetch_all(fund_list: list[dict], history_latest: Optional[dict] = None) -> l
           - code/name/purchase_status/purchase_limit/return_1y/error（兼容旧字段）
           - source/confidence/warnings（数据源元信息，新增）
     """
-    return aggregate(fund_list, history_latest=history_latest)
+    return aggregate(fund_list, history_latest=history_latest,
+                     include_market_distribution=include_market_distribution,
+                     market_distribution_year=market_distribution_year)
 
 
 __all__ = ["fetch_all", "aggregate"]

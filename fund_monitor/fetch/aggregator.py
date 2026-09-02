@@ -26,6 +26,7 @@ import time
 from typing import Optional
 
 from fund_monitor.fetch.sources import eastmoney_html, eastmoney_jjjz, eastmoney_ranking
+from fund_monitor.fetch.sources import csrc_market_distribution
 from fund_monitor.fetch.sources.base import SourceRecord, empty_record
 
 log = logging.getLogger(__name__)
@@ -36,6 +37,8 @@ log = logging.getLogger(__name__)
 def aggregate(
     fund_list: list[dict],
     history_latest: Optional[dict] = None,
+    include_market_distribution: bool = False,
+    market_distribution_year: int = 2026,
 ) -> list[dict]:
     """
     Args:
@@ -81,6 +84,11 @@ def aggregate(
     else:
         print(f"  ▶ 备源 HTML：跳过（{total} 只全部命中 JJJZ + RANKING）")
 
+    market_snap = {}
+    if include_market_distribution:
+        print(f"  ▶ CSRC：拉取 {market_distribution_year} 年季报市场分布...")
+        market_snap = csrc_market_distribution.fetch_many(fund_list, year=market_distribution_year)
+
     # ── 4. 合并 ──
     results = []
     for fund in fund_list:
@@ -95,6 +103,8 @@ def aggregate(
         )
         if fund.get("display"):
             merged["display"] = fund["display"]
+        if include_market_distribution:
+            merged.update(market_snap.get(code, {"market_distribution": {}}))
         results.append(merged)
 
     return results

@@ -45,5 +45,7 @@
     {"code": "021662", "name": "国富亚洲机会股票(QDII)C", "display": "国富亚洲机会"}
   ],
   "history_file": "data/history.json",
-  "image_base_url": ""
+  "image_base_url": "",
+  "market_distribution_enabled": false,
+  "market_distribution_year": 2026
 }
