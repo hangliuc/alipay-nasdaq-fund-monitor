@@ -191,18 +191,35 @@ def _merge(
         out["error"] = None
 
     out["warnings"] = _dedupe(warnings)
-    out["confidence"] = _confidence(quota_source, performance_source, out["cross_validation"])
+    out["confidence"] = _confidence(
+        quota_source,
+        performance_source,
+        out["cross_validation"],
+        status,
+    )
     return out
 
 
-def _confidence(quota_source: str, performance_source: str, validation: str) -> str:
+def _confidence(
+    quota_source: str,
+    performance_source: str,
+    validation: str,
+    purchase_status: str,
+) -> str:
     if quota_source == "none":
         return "low"
     if quota_source == "stale":
         return "low"
     if validation == "mismatch":
         return "medium"
-    if quota_source == "html" or performance_source == "html":
+    # 排行接口通常不返回暂停申购基金，收益率由 HTML 补充属于预期路径，
+    # 不应仅因 performance_source=html 将整体置信度降为 medium。
+    expected_html_performance = (
+        quota_source == "akshare"
+        and performance_source == "html"
+        and "暂停" in purchase_status
+    )
+    if quota_source == "html" or (performance_source == "html" and not expected_html_performance):
         return "medium"
     return "high"
 

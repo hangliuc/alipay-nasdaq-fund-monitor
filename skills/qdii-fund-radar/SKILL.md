@@ -28,7 +28,7 @@ pip install -r requirements.txt
 
 支持以下过滤和排序参数：`--code CODE ...`、`--group passive|active|all`、`--status STATUS`、`--sort return_1y|purchase_limit|name`、`--limit N`。查询市场分布时可用 `--year YYYY` 指定报告年份；综合快照可加 `--include-market-distribution`。
 
-向用户或其他 agent 返回结果时，必须保留 `source`、`quota_source`、`performance_source`、`cross_validation`、`confidence`、`warnings` 和 `error`。`source=stale` 表示使用历史兜底数据。`cross_validation` 可能为 `matched`、`mismatch`、`akshare_only`、`html_only`、`stale` 或 `none`。市场分布来自季度报告，不是实时持仓；不要根据这些字段推断投资建议或未来收益。
+向用户或其他 agent 返回结果时，必须保留 `source`、`quota_source`、`performance_source`、`cross_validation`、`confidence`、`warnings` 和 `error`。`source=stale` 表示使用历史兜底数据。`cross_validation` 可能为 `matched`、`mismatch`、`akshare_only`、`html_only`、`stale` 或 `none`。暂停申购基金可能不在 AKShare 的排行结果中，此时若限购数据来自 AKShare 且 HTML 验证一致，`performance_source=html` 不会单独导致 `confidence=medium`。市场分布来自季度报告，不是实时持仓；不要根据这些字段推断投资建议或未来收益。
 
 示例：
 

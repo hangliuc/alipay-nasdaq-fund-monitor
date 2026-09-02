@@ -61,6 +61,8 @@ HTML 请求逐只执行，并在请求之间保留延迟；不再维护多套运
 
 结果一致时标记为 `high`；存在差异时保留 AKShare 结果，增加告警，置信度降为 `medium`。
 
+暂停申购基金可能不会出现在 AKShare 的排行结果中，因此其近一年收益率由天天基金 HTML 详情页提供。只要限购数据来自 AKShare、HTML 状态与限购信息验证一致，且没有字段冲突，这属于预期的数据覆盖差异，整体仍标记为 `high`，不因 `performance_source=html` 单独降级。
+
 ### 只有一个来源成功
 
 - AKShare 成功、HTML 失败：使用 AKShare，并记录 HTML 失败原因。

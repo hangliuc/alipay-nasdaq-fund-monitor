@@ -413,10 +413,15 @@ def fetch_funds(funds: list[dict], include_market: bool = False, year: int = 202
             warnings.append("⚠️ 数据陈旧：实时双源均失败，回退到上次记录")
         else:
             base["error"] = None
+        expected_html_performance = (
+            quota_source == "akshare"
+            and performance_source == "html"
+            and "暂停" in base.get("purchase_status", "")
+        )
         base["confidence"] = (
             "low" if quota_source in ("none", "stale") else
             "medium" if quota_source == "html" or base["cross_validation"] == "mismatch"
-            or performance_source == "html" else "high"
+            or (performance_source == "html" and not expected_html_performance) else "high"
         )
         base["warnings"] = _dedupe(warnings)
         rows.append(base)
