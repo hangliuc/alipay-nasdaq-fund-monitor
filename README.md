@@ -150,7 +150,12 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 ## Agent Skill 接入
 
-仓库内置 `skills/qdii-fund-radar/`，可供其他 agent 读取并调用。它提供只读 JSON 查询接口：
+仓库内置自包含的 `skills/qdii-fund-radar/`，可直接复制给其他 agent 安装，不需要下载整个项目，也不需要部署 QDII Radar 服务。它会直接访问天天基金和证监会公开数据源，并提供只读 JSON 查询接口：
+
+```bash
+# 安装到 agent 的 Skill 目录（路径按实际环境调整）
+cp -R skills/qdii-fund-radar ~/.codex/skills/
+```
 
 ```bash
 # 限额与申购状态

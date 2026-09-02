@@ -1,4 +1,4 @@
 interface:
   display_name: "QDII 基金雷达"
-  short_description: "查询 QDII 限额、收益率和市场分布"
+  short_description: "查询 QDII 限额、收益率和市场分布，支持结构化查询"
   default_prompt: "使用 $qdii-fund-radar 查询本项目的 QDII 基金数据，并返回包含数据源警告的结构化结果。"
