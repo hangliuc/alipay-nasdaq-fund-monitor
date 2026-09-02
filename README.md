@@ -1,204 +1,194 @@
-# QDII Quota Radar
+# QDII Fund Radar
 
-一个面向纳斯达克及全球科技主题 QDII 基金的申购额度监控工具：在中国交易日抓取申购状态、单日限额与近一年收益率，生成小红书卡片，并通过飞书提醒。
+[English](README_EN.md)
 
-> 数据仅供信息参考，不构成投资建议。实际申购规则以基金管理人和交易渠道的最新页面或公告为准。
+QDII Fund Radar 是一个面向 Agent 的基金信息查询 Skill，同时提供定时监控、日报生成和消息推送能力。Agent 可以通过结构化 JSON 查询 QDII 基金的限购、收益和市场分布信息，也可以在服务器上运行完整的日报任务。
 
-## 能做什么
+仓库地址：[github.com/hangliuc/qdii-fund-radar](https://github.com/hangliuc/qdii-fund-radar)
 
-- 监控 `config.json` 中的被动指数型、主动管理型 QDII 基金（当前共 37 只）。
-- 生成两张 1080px 宽竖版卡片：被动型（指数基金）和主动型（主动管理 QDII）。
-- 卡片展示基金简称、代码、近一年收益率、申购状态和当日限额，并按额度排序。
-- 自动发现申购状态/限额变化，飞书消息附带可复制的发布文案。
-- 保存最近 30 个有记录日期的快照；周末、中国法定节假日和调休自动处理。
-- 支持多个飞书 Webhook、静态图片链接和 Docker 定时运行。
+## Agent Skill
 
-## 日报数据链路
+`skills/qdii-fund-radar/` 是本项目的核心交付物，可独立复制和安装，不依赖主项目或服务器。Skill 通过 `scripts/query.py` 提供只读查询接口，标准输出返回结构化 JSON，适合 Agent 调用、筛选、排序和二次分析。
 
-日报卡片只使用天天基金数据。
+支持以下查询操作：
 
-```text
-天天基金 JJJZ 全市场接口 ──┐
-  申购状态、申购限额、净值    ├──> 合并、排序、生成日报卡片 ──> 飞书提醒
-天天基金 RANKING 全市场接口 ─┘
-  近一年收益率
-            │ 主源失败或个别基金缺失
-            ▼
-天天基金基金详情页（HTML）
-            │ 限额仍不可得
-            ▼
-data/history.json 上次成功快照
+- `snapshot`：返回基金综合快照。
+- `quota`：查询申购状态和单日申购限额。
+- `performance`：查询近一年收益率、最新净值和净值日期。
+- `market-distribution`：查询证监会季报中的国家/地区市场投资分布。
+- `summary`：按分组和申购状态统计，并列出收益率排名。
+
+支持按基金代码、基金分组、申购状态筛选，也支持按近一年收益率、申购额度或名称排序。每条结果都会保留 `source`、`confidence`、`warnings` 和 `error` 字段，便于 Agent 判断结果质量和处理异常。
+
+示例：
+
+```bash
+python3 skills/qdii-fund-radar/scripts/query.py --action snapshot
+python3 skills/qdii-fund-radar/scripts/query.py --action quota --status 限大额
+python3 skills/qdii-fund-radar/scripts/query.py --action performance --sort return_1y --limit 10
+python3 skills/qdii-fund-radar/scripts/query.py --action market-distribution --code 008971 --year 2026
 ```
 
-正常运行只需两个 HTTP 请求：一次 JJJZ 全市场快照和一次 RANKING 全市场快照。仅在主源失败或某只基金缺失时，才逐只请求 HTML 详情页。
+Skill 的完整安装和参数说明见 [`skills/qdii-fund-radar/SKILL.md`](skills/qdii-fund-radar/SKILL.md)。
 
-| 数据 | 正常来源 | 降级路径 |
-| --- | --- | --- |
-| 申购状态、申购限额、净值 | `Fund_JJJZ_Data.aspx` | 详情页 → 对应分组的历史快照 → 失败 |
-| 近一年收益率 | `rankhandler.aspx`（包含暂停申购基金） | 详情页 → 空值 |
+## 功能
 
-每条结果还包含诊断字段：`source`（`jjjz` / `html` / `stale` / `none`）、`confidence`（`high` / `medium` / `low`）和 `warnings`。发生历史回退、抓取失败或主备数据不一致时，命令行和飞书会显示数据源健康提醒；没有可用数据的基金不会绘入卡片。
+- 可以获取基金限购状态、限购额度、净值和近一年收益率。
+- 可选抓取证监会季报中的国家/地区市场投资分布。
+- 支持被动型和主动型基金配置，以及历史记录和限额变化识别。
 
-## 快速开始
+## 目录结构
+
+```text
+fund_monitor/             核心抓取、降级、历史、图片和通知逻辑
+config.json               基金列表和运行配置
+data/history.json         历史快照（运行时状态）
+data/cards/               生成的日报图片（运行时产物）
+docs/                     数据来源和采集流程说明
+fonts/                    图片渲染所需中文字体
+tests/fixtures/           数据源解析测试夹具
+.github/workflows/        自动部署和手动运行工作流
+Dockerfile                定时任务镜像
+docker-compose.yml        monitor + nginx 服务编排
+```
+
+## 本地运行
 
 要求：Python 3.11+。
 
 ```bash
-git clone https://github.com/hangliuc/qdii-quota-radar.git
-cd qdii-quota-radar
+git clone https://github.com/hangliuc/qdii-fund-radar.git
+cd qdii-fund-radar
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-
-# 本地试跑：生成卡片但不推送飞书
-python3 main.py --dry-run --force --no-history
+python3 main.py --dry-run --force
 ```
 
-默认输出位置：
-
-- 卡片：`data/cards/`
-- 历史快照：`data/history.json`
-- 数据源健康与限额变动：标准输出
-
-## 常用命令
+`--dry-run` 只是不发送飞书通知；如需同时避免写历史或生成图片，可使用：
 
 ```bash
-# 不发送飞书；仍会生成图片和写入历史
-python3 main.py --dry-run
-
-# 只检查指定基金
-python3 main.py --dry-run --force --fund-codes 008971 019173
-
-# 只看抓取与健康状态，不生成图片、不发通知
-python3 main.py --no-image --no-notify --force
-
-# 不写入历史，且强制忽略交易日判断
-python3 main.py --dry-run --no-history --force
+python3 main.py --dry-run --force --no-history --no-image
 ```
 
-| 参数 | 说明 |
-| --- | --- |
-| `--config PATH` | 配置文件路径，默认 `config.json` |
-| `--fund-codes CODE [CODE ...]` | 仅处理指定基金代码 |
-| `--dry-run` | 不向飞书发送消息 |
-| `--no-image` | 不生成日报卡片 |
-| `--no-notify` | 不发送任何通知 |
-| `--no-history` | 不更新历史快照和变动记录 |
-| `--force` | 跳过交易日检查 |
+## 命令参数
 
-## 配置与飞书
+```text
+--config PATH                 使用指定配置文件，默认 config.json
+--fund-codes CODE ...         只查询指定基金代码
+--dry-run                     不发送飞书通知
+--no-history                  不更新 data/history.json
+--no-image                    不生成日报图片
+--no-notify                   完全关闭通知
+--force                       忽略周末和节假日检查
+--market-distribution         抓取证监会市场分布数据
+```
 
-`config.json` 中的主要字段：
+示例：
 
-| 字段 | 说明 |
-| --- | --- |
-| `passive_funds` / `active_funds` | 两类基金清单 |
-| `history_file` | 历史快照路径 |
-| `image_base_url` | 卡片的公开访问基础 URL |
-| `feishu_webhook` | 主飞书 Webhook（兼容旧字段） |
-| `feishu_webhooks` | 额外 Webhook 列表，会自动去重合并 |
+```bash
+python3 main.py --force --fund-codes 008971 000041
+python3 main.py --dry-run --force --market-distribution
+```
 
-每只基金至少应有 `code`、`name`；`display` 用于指定卡片上的短名称。
+## 配置
 
-推荐将敏感项以环境变量传入，而不要提交真实 Webhook：
+基金列表和默认选项位于 `config.json`：
+
+```json
+{
+  "passive_funds": [
+    {"code": "012345", "name": "示例基金", "share_class": "C"}
+  ],
+  "active_funds": [],
+  "history_file": "data/history.json",
+  "image_base_url": "http://your-server:8900",
+  "market_distribution_enabled": false,
+  "market_distribution_year": 2026,
+  "feishu_webhook": ""
+}
+```
+
+生产环境建议通过环境变量注入敏感或环境相关配置：
 
 ```bash
 export FEISHU_WEBHOOK='https://open.feishu.cn/open-apis/bot/v2/hook/…'
-export IMAGE_BASE_URL='https://example.com/qdii-cards'
-python3 main.py --force
+export IMAGE_BASE_URL='http://your-server:8900'
 ```
 
-`FEISHU_WEBHOOK`、`IMAGE_BASE_URL` 会覆盖配置文件中的对应值。没有 Webhook 时，通知内容会回退打印到控制台。
+`feishu_webhooks` 可配置多个通知地址；程序会自动去重并忽略空值。不要把真实 webhook 提交到 Git。
+
+## 推送模块
+
+推送模块负责定时运行监控任务、生成日报卡片并发送通知：
+
+- 周末和中国法定非交易日自动跳过，也可用 `--force` 强制运行。
+- 分别监控被动型、主动型基金，支持按代码筛选。
+- 生成适合飞书消息使用的 PNG 日报卡片。
+- 当前支持飞书机器人推送；微信、钉钉等渠道可以随时支持。
+- 推送内容可包含限购状态变化、限额变化、净值、收益率和市场分布信息。
+
+通知渠道通过独立的 `FeishuNotifier` 模块实现，后续增加微信、钉钉或其他渠道时，不需要改动基金查询和日报生成逻辑。
 
 ## Docker 部署
 
-`docker-compose.yml` 包含两个服务：
-
-- `monitor`：通过 cron 于每天北京时间 07:16 运行；非交易日自动退出。
-- `nginx`：将 `data/cards/` 以静态文件方式映射到宿主机 `8900` 端口，供飞书打开卡片。
-
-创建 `.env` 后启动：
-
-```dotenv
-FEISHU_WEBHOOK=https://open.feishu.cn/open-apis/bot/v2/hook/…
-IMAGE_BASE_URL=http://YOUR_SERVER_HOST:8900
-```
+项目包含两个服务：`monitor` 负责定时运行和生成图片，`nginx` 负责以 HTTP 提供 `data/cards/` 中的图片。
 
 ```bash
+export FEISHU_WEBHOOK='你的飞书 webhook'
+export IMAGE_BASE_URL='http://服务器地址:8900'
 docker compose up -d --build
-
-# 立即验证一次
-docker compose run --rm monitor python main.py --force --dry-run --no-history
-
-# 查看 cron 日志
-docker logs -f qdii-quota-radar
+docker compose ps
+docker compose logs -f monitor
 ```
 
-`data/` 挂载在容器外，重建容器后历史与卡片仍会保留。`IMAGE_BASE_URL` 必须能从飞书客户端访问；内网地址通常无法让外网用户打开图片。
+手动执行一次：
 
-## 自动化与测试
-- 推送到 `main` 会触发 GitHub Actions，通过 SSH 更新部署服务器并重建 Compose 服务。
-- `Manual Run (on server)` 工作流可在服务器上手动真实运行，支持 `dry_run`、`no_history` 开关。
-- `Fund Monitor (manual test only)` 工作流可执行一次本地 dry-run。
-- 官网 Adapter 测试使用本地 fixture，不依赖实时官网：
+```bash
+docker compose run --rm monitor python main.py --force --dry-run
+```
+
+日报图片默认通过 `8900` 端口访问。若服务器有防火墙或安全组，需要放行该端口，或将 `IMAGE_BASE_URL` 配置为反向代理后的 HTTPS 地址。
+
+## GitHub Actions
+
+- `deploy.yml`：推送到 `main` 后，通过 SSH 在服务器上拉取 [qdii-fund-radar](https://github.com/hangliuc/qdii-fund-radar) 并重建服务。
+- `manual-run.yml`：手动触发一次容器内查询，可选择 dry-run 和不写历史。
+- `fund-monitor.yml`：项目原有的定时工作流，是否启用取决于仓库中的 workflow 配置。
+
+`deploy.yml` 需要以下 GitHub Secrets：`SERVER_HOST`、`SERVER_USER`、`SSH_PRIVATE_KEY`、`FEISHU_WEBHOOK`。服务器上的项目目录和容器名称可以继续使用现有部署配置，无需因仓库改名迁移运行数据。
+
+## 数据源与降级
+
+详见 [`docs/data-acquisition-flow.md`](docs/data-acquisition-flow.md)。每条结果包含：
+
+- `source`：`jjjz`、`html`、`stale` 或 `none`。
+- `confidence`：当前结果的可信度。
+- `warnings`：数据源切换、陈旧或不一致提醒。
+- `error`：最终查询失败时的错误信息。
+
+市场分布来自证监会季度报告，不是实时持仓数据，不能据此推断投资建议或未来收益。
+
+## 测试与代码检查
+
+当前仓库主要包含数据源解析夹具，可使用标准库 unittest 扫描测试目录；若后续补充测试文件，命令无需变化：
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-部署工作流需要 GitHub Secrets：`SERVER_HOST`、`SERVER_USER`、`SSH_PRIVATE_KEY`、`FEISHU_WEBHOOK`。
-
-## Agent Skill 接入
-
-仓库内置自包含的 `skills/qdii-fund-radar/`，可直接复制给其他 agent 安装，不需要下载整个项目，也不需要部署 QDII Radar 服务。它会直接访问天天基金和证监会公开数据源，并提供只读 JSON 查询接口：
+项目配置了 Ruff 规则，建议提交前运行：
 
 ```bash
-# 安装到 agent 的 Skill 目录（路径按实际环境调整）
-cp -R skills/qdii-fund-radar ~/.codex/skills/
+ruff check .
 ```
 
-```bash
-# 限额与申购状态
-python3 skills/qdii-fund-radar/scripts/query.py --action quota
+## 注意事项
 
-# 按近一年收益率排序
-python3 skills/qdii-fund-radar/scripts/query.py --action performance --sort return_1y --limit 10
+- 天天基金和证监会页面属于外部数据源，接口或页面变化可能导致降级或失败。
+- `data/history.json` 用于状态变化比较，生产部署时应持久化并定期备份。
+- `data/cards/` 是运行时生成目录，不应作为源码提交。
 
-# 证监会季报市场分布
-python3 skills/qdii-fund-radar/scripts/query.py --action market-distribution --code 008971 --year 2026
+## 免责声明
 
-# 综合统计
-python3 skills/qdii-fund-radar/scripts/query.py --action summary
-```
-
-支持按基金代码、被动/主动分组、申购状态过滤，以及限额/收益率/名称排序。返回值包含 `as_of`、`data`、`count` 和 `warnings`；agent 应同时展示 `source`、`confidence`，并明确标注历史兜底数据。市场分布是季报数据，不代表实时持仓。
-
-## 项目结构
-
-```text
-main.py                         命令行入口
-config.json                     基金清单和默认配置
-fund_monitor/
-├── cli.py                      流程编排、交易日检查、通知与卡片生成
-├── config.py                   JSON / 环境变量配置加载
-├── trading_day.py              周末、节假日和调休判断
-├── fetch/
-│   ├── aggregator.py           双主源、HTML 降级、历史兜底与诊断
-│   ├── sources/                天天基金 JJJZ、RANKING、详情页来源
-├── storage/history.py          30 天历史快照与变动检测
-└── output/                     Pillow 卡片与飞书消息
-data/                           持久化历史和运行时卡片
-docs/                           数据来源、设计与适配器报告
-tests/                          官网适配器 fixture 回归测试
-```
-
-## 相关文档
-
-- [更新日志](CHANGELOG.md)
-- [适配器摘要](docs/adapters-summary-2026-08-26.md)
-- [各公司 Adapter 文档](docs/adapters/)
-# 基金市场分布
-
-可选抓取证监会基金信息披露网站季报中的“各个国家（地区）证券市场投资分布”。该功能独立于限额与收益率数据源，默认关闭；运行时使用 `--market-distribution`，或在 `config.json` 中将 `market_distribution_enabled` 设为 `true`。年份由 `market_distribution_year` 控制，默认 2026。
-
-基金配置可额外提供 `main_code`（A 类/主基金代码）和 `short_name`，用于证监会检索；未提供时回退到当前代码和名称。结果新增 `market_distribution`、`market_distribution_report_id` 字段，失败时写入 `market_distribution_error`，不会影响限购日报其它字段。
+本项目及其 Agent Skill 仅用于公开信息的查询、整理、技术演示和提醒，不构成任何形式的投资建议、收益承诺、买卖推荐或其他金融服务。基金数据可能存在延迟、缺失、错误或因页面和接口变化而无法获取的情况；任何查询结果均不应作为投资决策的唯一依据。使用者应自行核实信息并独立承担投资判断和相关风险，项目作者不对因使用本项目造成的任何直接或间接损失承担责任。

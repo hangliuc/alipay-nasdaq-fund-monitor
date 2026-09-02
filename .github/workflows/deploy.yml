@@ -19,7 +19,7 @@ jobs:
           script: |
             APP_DIR=/root/qdii-quota-radar
             OLD_DIR=/root/alipay-nasdaq-fund-monitor
-            REPO_URL=https://github.com/hangliuc/qdii-quota-radar.git
+            REPO_URL=https://github.com/hangliuc/qdii-fund-radar.git
 
             # 一次性迁移：项目改名前的旧目录整体搬到新路径
             # 先停掉旧容器（旧 compose 的 container_name 与新的不同，
